@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom — Woven Depths</title>
+    <!-- Include Simplex Noise library -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* Deep dark background */
+            background-color: #080507;
+            font-family: 'Courier New', monospace;
+            /* Muted text color */
+            color: rgba(160, 140, 145, 0.7);
+            touch-action: none;
+            width: 100%;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #main-canvas {
+            /* Threads + Border */
+            z-index: 1;
+        }
+
+        #wave-canvas {
+            /* Smoky overlay */
+            z-index: 2;
+            opacity: 0.85; /* Adjust opacity of the smoke */
+            mix-blend-mode: screen; /* How smoke blends with threads */
+        }
+
+        /* UI styles (kept similar to previous dark theme, adjust if needed) */
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(25, 20, 22, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 80, 85, 0.3);
+            display: flex; flex-wrap: wrap; gap: 8px;
+            transition: transform 0.3s ease-out;
+        }
+        .controls.hidden { transform: translateY(120%); }
+        button {
+            background: rgba(60, 45, 50, 0.8);
+            color: rgba(190, 170, 175, 0.9);
+            border: 1px solid rgba(100, 80, 85, 0.5);
+            padding: 8px 12px; border-radius: 5px; font-family: inherit; cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        button:hover { background: rgba(80, 65, 70, 0.9); }
+        button.active { background: rgba(100, 80, 85, 0.9); box-shadow: 0 0 10px rgba(100, 80, 85, 0.4); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; margin: 0 5px; }
+        .slider-container span { font-size: 11px; margin-bottom: 4px; color: rgba(160, 140, 145, 0.6); }
+        .slider { appearance: none; width: 90px; height: 3px; background: rgba(100, 80, 85, 0.3); border-radius: 1.5px; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: rgba(140, 110, 115, 0.8); cursor: pointer; }
+        #info { position: fixed; top: 20px; right: 20px; z-index: 100; background: rgba(25, 20, 22, 0.8); padding: 15px; border-radius: 8px; max-width: 280px; text-align: right; border: 1px solid rgba(100, 80, 85, 0.3); transition: opacity 0.3s ease-out; }
+        #info h3 { margin-bottom: 5px; color: rgba(190, 170, 175, 0.9); }
+        #info p { font-size: 13px; line-height: 1.4; margin-bottom: 8px; color: rgba(160, 140, 145, 0.7); }
+        #info.hidden { opacity: 0; pointer-events: none; }
+        .toggle-ui { position: fixed; bottom: 20px; right: 20px; z-index: 101; width: 35px; height: 35px; background: rgba(60, 45, 50, 0.8); border: 1px solid rgba(100, 80, 85, 0.5); border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: rgba(190, 170, 175, 0.9); font-size: 20px; transition: background-color 0.2s; }
+        .toggle-ui:hover { background: rgba(80, 65, 70, 0.9); }
+
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>  <!-- Threads and Border -->
+        <canvas id="wave-canvas"></canvas>  <!-- Noise Overlay -->
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+
+    <div id="controls" class="hidden">
+        <button id="reset-btn">Reset Energy</button>
+        <button id="sound-btn">Enable Sound</button>
+        <button id="camera-btn">Camera Mode</button>
+        <button id="fullscreen-btn">Fullscreen</button>
+
+        <div class="slider-container">
+            <span>Flow Speed</span>
+            <input type="range" min="0" max="100" value="40" class="slider" id="speed-slider">
+        </div>
+        <div class="slider-container">
+            <span>Density Falloff</span>
+            <input type="range" min="0" max="100" value="70" class="slider" id="decay-slider">
+        </div>
+        <div class="slider-container">
+            <span>Disturbance Size</span>
+            <input type="range" min="0" max="100" value="50" class="slider" id="resonance-slider">
+        </div>
+    </div>
+
+    <div id="info" class="hidden">
+        <h3>Ocean Loom</h3>
+        <p>Woven depths disturbed by unseen currents.</p>
+        <p>Interact to stir the haze.</p>
+    </div>
+
+    <div class="toggle-ui">::</div> <!-- Changed icon -->
+
+    <script type="module"> // IMPORTANT: type="module" to use import
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // Canvas Setup
+        const mainCanvas = document.getElementById('main-canvas'); // Threads, border
+        const mainCtx = mainCanvas.getContext('2d');
+        const waveCanvas = document.getElementById('wave-canvas'); // Noise overlay
+        const waveCtx = waveCanvas.getContext('2d');
+
+        // Noise Generator
+        const noise2D = createNoise2D();
+
+        // Global State
+        let soundEnabled = false, isAudioInitialized = false, cameraEnabled = false, isPaused = false;
+        let lastTime = 0, animationFrameId = null;
+
+        // Thread System (Visual Background)
+        const threadCount = 150; // More threads, tightly packed
+        let threads = [];
+        let threadWidth = 1.0; // Thinner threads
+        let threadSpacing;
+        const baseThreadLightness = 18; // Base darkness of threads
+        const energyToLightnessFactor = 15; // How much energy brightens threads (subtle)
+
+        // Wave Overlay (Noise Field) Parameters
+        let waveTime = Math.random() * 1000; // Noise time offset
+        let noiseSpeed = 0.008; // How fast the noise pattern evolves/moves
+        let noiseScale = 0.003; // Zoom level of the noise pattern (smaller value = larger features)
+        let baseDensity = 0.15; // Base opacity of the smoke
+        let energyToDensityFactor = 2.5; // How much local energy increases smoke density
+        let energyGrid = []; // Stores local energy affecting the overlay
+        let energyGridWidth = 0, energyGridHeight = 0;
+        const energyGridResolution = 40; // Pixels per grid cell (lower = more detail, more cost)
+        let energyDecay = 0.95; // How fast local energy dissipates (higher = slower)
+        let energySpread = 0.05; // How much energy spreads to neighbors (lower = less spread)
+        let disturbanceRadiusFactor = 0.5; // Scales the 'resonance' slider
+
+        // Camera/Motion
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+        let motionThreshold = 30;
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 80;
+
+        // --- Audio --- (Textural Focus)
+        let audioContext = null;
+        let masterGain = null;
+        let reverb = null;
+        let noiseSources = []; // { bufferSource, filter, gain } for textural bursts
+        let droneOsc = null, droneGain = null, droneFilter = null; // Low background drone
+
+        const noteFrequencies = [ // Low, potentially dissonant drone/impact notes
+             55.00,  // A1
+             61.74,  // B1
+             65.41,  // C2
+             73.42,  // D2
+             82.41,  // E2
+             87.31,  // F2
+        ];
+
+        // UI Elements
+        const controlsPanel = document.getElementById('controls');
+        const infoPanel = document.getElementById('info');
+        const uiToggleButton = document.querySelector('.toggle-ui');
+
+        // --- Initialization ---
+
+        function resizeCanvases() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            mainCanvas.width = width; mainCanvas.height = height;
+            waveCanvas.width = width; waveCanvas.height = height;
+            offCanvas.width = width; offCanvas.height = height;
+
+            initThreads();
+            initEnergyGrid(); // Initialize grid based on new size
+
+            if (!isPaused) {
+                drawStaticElements(); // Redraw border/threads immediately
+                drawWaveOverlay(); // Redraw overlay
+            }
+        }
+
+        function initThreads() {
+            threads = [];
+            threadSpacing = mainCanvas.width / (threadCount + 1);
+            const baseHue = 355; // Desaturated Red/Crimson base
+
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    // Energy now primarily drives the overlay, not thread visuals/sound directly
+                    // Store a separate 'visualEnergy' for subtle thread brightening? Or just use grid.
+                });
+            }
+             updateParametersFromSliders(); // Apply initial slider values
+        }
+
+        function initEnergyGrid() {
+            energyGridWidth = Math.ceil(mainCanvas.width / energyGridResolution);
+            energyGridHeight = Math.ceil(mainCanvas.height / energyGridResolution);
+            energyGrid = [];
+            for (let y = 0; y < energyGridHeight; y++) {
+                energyGrid[y] = new Array(energyGridWidth).fill(0);
+            }
+            console.log(`Energy grid initialized: ${energyGridWidth}x${energyGridHeight}`);
+        }
+
+        async function initAudio() {
+             // Standard AudioContext resume/creation logic...
+             if (isAudioInitialized) {
+                 if (audioContext && audioContext.state === 'suspended') {
+                    try { await audioContext.resume(); console.log("AudioContext resumed."); masterGain.gain.setValueAtTime(0.4, audioContext.currentTime); soundEnabled = true; /* update button */ return true; } catch (err) { console.error("Error resuming:", err); return false; }
+                } else if (audioContext && audioContext.state === 'running') {
+                     masterGain.gain.setValueAtTime(0.4, audioContext.currentTime); soundEnabled = true; /* update button */ return true;
+                }
+             }
+             try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { alert("Web Audio API not supported."); return false; }
+             if (audioContext.state === 'suspended') { console.log("Audio suspended..."); return false; } // Needs interaction
+
+            try {
+                masterGain = audioContext.createGain();
+                masterGain.gain.setValueAtTime(0.4, audioContext.currentTime); // Moderate volume
+
+                // Reverb (Dark, slightly shorter tail than before)
+                reverb = audioContext.createConvolver();
+                // ... (impulse response generation - similar to wine-dark, maybe slightly shorter)
+                 const impulseLength = audioContext.sampleRate * 2.8;
+                 const impulseDecay = 3.5;
+                 const impulse = audioContext.createBuffer(2, impulseLength, audioContext.sampleRate);
+                 for (let ch = 0; ch < 2; ch++) {
+                     const data = impulse.getChannelData(ch);
+                     for (let i = 0; i < impulseLength; i++) data[i] = (Math.random()*2-1)*Math.pow(1-i/impulseLength, impulseDecay);
+                 }
+                 reverb.buffer = impulse;
+                 reverb.connect(masterGain);
+
+                // Noise Sources for impacts (Create on demand? Or pre-make?) Let's pre-make a few.
+                noiseSources = [];
+                for (let i = 0; i < 4; i++) {
+                     const bufferSource = audioContext.createBufferSource();
+                     const bufferSize = audioContext.sampleRate * 1.5; // 1.5 sec noise buffer
+                     const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                     const output = noiseBuffer.getChannelData(0);
+                     // Brown noise (more low end) = integrate white noise
+                     let lastOut = 0.0;
+                     for (let j = 0; j < bufferSize; j++) {
+                         const white = Math.random() * 2 - 1;
+                         output[j] = (lastOut + (0.02 * white)) / 1.02; // Simple brown noise filter
+                         lastOut = output[j];
+                         output[j] *= 3.5; // Gain compensation
+                     }
+                     bufferSource.buffer = noiseBuffer;
+                     bufferSource.loop = true; // Loop the noise buffer
+
+                     const filter = audioContext.createBiquadFilter();
+                     filter.type = 'bandpass'; // Use bandpass for shaping
+                     filter.frequency.value = 300; // Base frequency
+                     filter.Q.value = 2;
+
+                     const gainNode = audioContext.createGain();
+                     gainNode.gain.value = 0; // Start silent
+
+                     bufferSource.connect(filter);
+                     filter.connect(gainNode);
+                     gainNode.connect(reverb); // Send noise bursts to reverb
+                     gainNode.connect(masterGain); // And some direct signal
+                     bufferSource.start();
+                     noiseSources.push({ bufferSource, filter, gainNode });
+                }
+
+
+                // Background Drone
+                droneOsc = audioContext.createOscillator();
+                droneOsc.type = 'sawtooth'; // Raw sound
+                droneOsc.frequency.value = noteFrequencies[0] / 2; // Very low fundamental (A0)
+                droneFilter = audioContext.createBiquadFilter();
+                droneFilter.type = 'lowpass';
+                droneFilter.frequency.value = 90; // Keep it very muffled
+                droneFilter.Q.value = 5;
+                droneGain = audioContext.createGain();
+                droneGain.gain.value = 0.08; // Subtle drone level
+
+                droneOsc.connect(droneFilter);
+                droneFilter.connect(droneGain);
+                droneGain.connect(masterGain);
+                droneOsc.start();
+
+
+                masterGain.connect(audioContext.destination);
+                soundEnabled = true; isAudioInitialized = true;
+                document.getElementById('sound-btn').textContent = "Sound On";
+                document.getElementById('sound-btn').classList.add('active');
+                console.log("Audio initialized (Textural).");
+                return true;
+
+            } catch (error) { /* Error handling... */ console.error("Audio init error:", error); return false; }
+        }
+
+        // --- Interaction & Updates ---
+
+        function addDisturbance(x, y, radius, strength) {
+            const gridX = Math.floor(x / energyGridResolution);
+            const gridY = Math.floor(y / energyGridResolution);
+            const gridRadius = Math.ceil(radius / energyGridResolution * disturbanceRadiusFactor);
+
+            for (let dy = -gridRadius; dy <= gridRadius; dy++) {
+                for (let dx = -gridRadius; dx <= gridRadius; dx++) {
+                    const gx = gridX + dx;
+                    const gy = gridY + dy;
+
+                    if (gy >= 0 && gy < energyGridHeight && gx >= 0 && gx < energyGridWidth) {
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        if (distance <= gridRadius) {
+                            const falloff = Math.pow(1 - distance / gridRadius, 1.5); // Sharper falloff
+                            const impact = strength * falloff * 0.8; // Adjust impact scaling
+                            energyGrid[gy][gx] = Math.min(1.0, energyGrid[gy][gx] + impact);
+
+                             // Trigger sound based on the *first* impacted grid cell (less overwhelming)
+                            if (dx === 0 && dy === 0 && soundEnabled && isAudioInitialized && impact > 0.05) {
+                                triggerTexturalSound(energyGrid[gy][gx]); // Pass current energy level
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function triggerTexturalSound(intensity) {
+            if (!audioContext || noiseSources.length === 0) return;
+
+            // Pick a random noise source
+            const voiceIndex = Math.floor(Math.random() * noiseSources.length);
+            const voice = noiseSources[voiceIndex];
+            const { filter, gainNode } = voice;
+
+            const now = audioContext.currentTime;
+
+            // Filter modulation - sweep bandpass based on intensity
+            const baseFreq = 100 + Math.random() * 200; // Low base center freq
+            const peakFreq = baseFreq + intensity * 800;
+            const qValue = 1 + intensity * 4; // Higher Q for more resonance when intense
+
+            filter.frequency.cancelScheduledValues(now);
+            filter.frequency.setValueAtTime(filter.frequency.value, now);
+            filter.frequency.linearRampToValueAtTime(peakFreq, now + 0.1);
+            filter.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.8 + Math.random() * 0.5); // Slower falloff
+            filter.Q.linearRampToValue(qValue, now + 0.1);
+            filter.Q.linearRampToValue(1.5, now + 0.8);
+
+
+            // Gain Envelope - Burst / Swell
+            const attackTime = 0.05 + Math.random() * 0.1;
+            const decayTime = 0.5 + Math.random() * 0.8; // Longer decay for texture
+            const gainAmount = intensity * 0.5; // Lower gain for noise
+
+            gainNode.gain.cancelScheduledValues(now);
+            gainNode.gain.setValueAtTime(0, now); // Start silent
+            gainNode.gain.linearRampToValueAtTime(gainAmount, now + attackTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + attackTime + decayTime);
+        }
+
+        function updateEnergyGrid() {
+            let nextEnergyGrid = [];
+             for (let y = 0; y < energyGridHeight; y++) {
+                nextEnergyGrid[y] = new Array(energyGridWidth).fill(0);
+             }
+
+             for (let y = 0; y < energyGridHeight; y++) {
+                 for (let x = 0; x < energyGridWidth; x++) {
+                     let currentEnergy = energyGrid[y][x];
+                     let spreadEnergy = 0;
+
+                     // Basic 4-neighbor spread (can be expanded)
+                     if (y > 0) spreadEnergy += energyGrid[y-1][x];
+                     if (y < energyGridHeight - 1) spreadEnergy += energyGrid[y+1][x];
+                     if (x > 0) spreadEnergy += energyGrid[y][x-1];
+                     if (x < energyGridWidth - 1) spreadEnergy += energyGrid[y][x+1];
+
+                     // Calculate next state: decay + spread from neighbors
+                      let newEnergy = currentEnergy * energyDecay + spreadEnergy * energySpread;
+                      // Apply spread *from* this cell to neighbors (implicit in next step)
+
+                      // Clamp energy
+                      nextEnergyGrid[y][x] = Math.max(0, Math.min(1.0, newEnergy));
+                 }
+             }
+             energyGrid = nextEnergyGrid;
+        }
+
+        function getEnergyAt(x, y) {
+            // Bilinear interpolation for smoother energy lookup between grid points
+            const gridXf = x / energyGridResolution;
+            const gridYf = y / energyGridResolution;
+            const gridX0 = Math.floor(gridXf);
+            const gridY0 = Math.floor(gridYf);
+            const gridX1 = gridX0 + 1;
+            const gridY1 = gridY0 + 1;
+
+            // Check bounds
+            if (gridY0 < 0 || gridY1 >= energyGridHeight || gridX0 < 0 || gridX1 >= energyGridWidth) {
+                return 0;
+            }
+
+            const tx = gridXf - gridX0;
+            const ty = gridYf - gridY0;
+
+            const e00 = energyGrid[gridY0][gridX0];
+            const e10 = energyGrid[gridY0][gridX1];
+            const e01 = energyGrid[gridY1][gridX0];
+            const e11 = energyGrid[gridY1][gridX1];
+
+            const ex0 = e00 + (e10 - e00) * tx; // Interpolate along x for top row
+            const ex1 = e01 + (e11 - e01) * tx; // Interpolate along x for bottom row
+
+            return ex0 + (ex1 - ex0) * ty; // Interpolate along y
+        }
+
+
+        // --- Drawing ---
+
+        function drawStaticElements() {
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+            // Draw Top Border (Example - needs texture)
+            const borderHeight = 30; // Height of the border
+            // Background wood color
+            mainCtx.fillStyle = '#3D2B1F'; // Dark brown
+            mainCtx.fillRect(0, 0, mainCanvas.width, borderHeight);
+             // Simple grain effect
+             mainCtx.strokeStyle = 'rgba(70, 50, 40, 0.5)';
+             mainCtx.lineWidth = 0.5;
+             for(let i = 0; i < mainCanvas.width; i+= 3) {
+                 mainCtx.beginPath();
+                 mainCtx.moveTo(i + (Math.random()-0.5)*2, 0);
+                 mainCtx.lineTo(i + (Math.random()-0.5)*2, borderHeight);
+                 mainCtx.stroke();
+             }
+             // Highlight/Shadow lines
+             mainCtx.fillStyle = 'rgba(90, 70, 60, 0.6)';
+             mainCtx.fillRect(0, borderHeight - 4, mainCanvas.width, 2); // Lower highlight
+              mainCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+             mainCtx.fillRect(0, 0, mainCanvas.width, 2); // Top shadow
+
+
+            // Draw Threads
+            const baseHue = 355; // Crimson
+            const baseSaturation = 40; // Desaturated
+
+            mainCtx.lineWidth = threadWidth;
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                // Get average energy near the top of the thread for subtle effect
+                const threadEnergy = getEnergyAt(thread.x, borderHeight + 10); // Sample energy just below border
+                const lightness = baseThreadLightness + threadEnergy * energyToLightnessFactor;
+                mainCtx.strokeStyle = `hsl(${baseHue}, ${baseSaturation}%, ${lightness}%)`;
+
+                mainCtx.beginPath();
+                mainCtx.moveTo(thread.x, borderHeight); // Start below border
+                mainCtx.lineTo(thread.x, mainCanvas.height);
+                mainCtx.stroke();
+            }
+        }
+
+
+        function drawWaveOverlay() {
+            waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+
+            // This can be costly. Draw at lower resolution? Or sample noise less densely?
+            // Let's try sampling less densely first.
+            const sampleStep = 5; // Calculate noise every N pixels
+            const time = waveTime; // Use evolving time for animation
+
+            for (let y = 0; y < waveCanvas.height; y += sampleStep) {
+                for (let x = 0; x < waveCanvas.width; x += sampleStep) {
+                    // Get noise value - use multiple octaves for texture?
+                     // For now, single octave. Adjust noiseScale and time for effect.
+                    const noiseVal = (noise2D(x * noiseScale, y * noiseScale + time) + 1) / 2; // Range 0-1
+
+                    // Get local energy from grid
+                    const localEnergy = getEnergyAt(x, y);
+
+                    // Calculate final density/alpha
+                    const density = baseDensity + localEnergy * energyToDensityFactor * noiseVal; // Energy makes noise 'visible'
+                    const alpha = Math.min(0.9, Math.max(0, density)); // Clamp alpha
+
+                    if (alpha > 0.01) { // Only draw if somewhat visible
+                         // Smoky color (desaturated white/grey)
+                        waveCtx.fillStyle = `rgba(180, 175, 178, ${alpha})`;
+                        waveCtx.fillRect(x, y, sampleStep, sampleStep); // Fill square area
+                    }
+                }
+            }
+        }
+
+
+        // --- Animation Loop ---
+
+        function animate(currentTime) {
+             animationFrameId = requestAnimationFrame(animate);
+            const deltaTime = (currentTime - lastTime) / 1000; // Delta time in seconds
+            lastTime = currentTime;
+
+            if (!isPaused) {
+                waveTime += noiseSpeed; // Evolve noise pattern
+
+                updateEnergyGrid(); // Decay and spread energy
+
+                if (cameraEnabled) {
+                    processCameraFeed(currentTime); // Will call addDisturbance
+                }
+
+                // Redrawing components
+                drawStaticElements(); // Redraw threads/border (needed if thread brightness changes)
+                drawWaveOverlay();    // Redraw the noise field
+            }
+        }
+
+        // (Event listeners setup - similar to previous, ensure addDisturbance is called)
+         function setupEventListeners() {
+             window.addEventListener('resize', resizeCanvases);
+             mainCanvas.addEventListener('pointerdown', (e) => { if (!cameraEnabled) { e.preventDefault(); mainCanvas.setPointerCapture(e.pointerId); addDisturbance(e.clientX, e.clientY, 80, 0.9); } }); // Larger radius, less strength needed now?
+             mainCanvas.addEventListener('pointermove', (e) => { if (!cameraEnabled && e.buttons === 1 && mainCanvas.hasPointerCapture(e.pointerId)) { e.preventDefault(); addDisturbance(e.clientX, e.clientY, 60, 0.5); } });
+             const releasePointer = (e) => { if (mainCanvas.hasPointerCapture(e.pointerId)) mainCanvas.releasePointerCapture(e.pointerId); };
+             mainCanvas.addEventListener('pointerup', releasePointer); mainCanvas.addEventListener('pointercancel', releasePointer); mainCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+             // Buttons (Reset, Sound, Camera, Fullscreen, Toggle) - Standard setup
+             document.getElementById('reset-btn').addEventListener('click', () => initEnergyGrid()); // Reset energy
+             document.getElementById('sound-btn').addEventListener('click', async () => { /* Standard sound toggle logic */
+                const btn = document.getElementById('sound-btn');
+                 if (!isAudioInitialized && audioContext && audioContext.state === 'suspended') {
+                     const success = await initAudio(); if (!success) { btn.textContent = "Sound Error"; btn.classList.remove('active'); alert("Could not start audio."); }
+                 } else if (!soundEnabled || !isAudioInitialized) {
+                     const success = await initAudio(); if (!success && !audioContext) { btn.textContent = "Sound Error"; btn.classList.remove('active'); } else if (!success) { btn.textContent = "Enable Sound"; btn.classList.remove('active'); if (audioContext?.state === 'suspended') alert("Audio needs interaction."); }
+                 } else { if (audioContext && masterGain) { masterGain.gain.cancelScheduledValues(audioContext.currentTime); masterGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2); } soundEnabled = false; btn.textContent = "Enable Sound"; btn.classList.remove('active'); }
+             });
+             document.getElementById('camera-btn').addEventListener('click', () => { if (!cameraEnabled) initCamera(); else disableCamera(); }); // Reuse previous camera functions
+             document.getElementById('fullscreen-btn').addEventListener('click', () => { /* Standard fullscreen */ if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(err => console.error(`Fullscreen error: ${err.message}`)); else document.exitFullscreen(); });
+             uiToggleButton.addEventListener('click', () => { const isHidden = controlsPanel.classList.toggle('hidden'); infoPanel.classList.toggle('hidden', isHidden); uiToggleButton.textContent = isHidden ? '::' : 'x'; });
+             // Sliders
+             document.getElementById('speed-slider').addEventListener('input', updateParametersFromSliders);
+             document.getElementById('decay-slider').addEventListener('input', updateParametersFromSliders);
+             document.getElementById('resonance-slider').addEventListener('input', updateParametersFromSliders);
+         }
+
+         function updateParametersFromSliders() {
+             const speedVal = parseInt(document.getElementById('speed-slider').value) / 100;
+             const decayVal = parseInt(document.getElementById('decay-slider').value) / 100;
+             const resonanceVal = parseInt(document.getElementById('resonance-slider').value) / 100;
+
+             noiseSpeed = 0.001 + speedVal * 0.02; // Speed of noise evolution/drift
+             // Decay: Higher slider value = slower decay (closer to 1)
+             energyDecay = 0.92 + decayVal * 0.075; // Range ~0.92 (fast) to 0.995 (very slow)
+             // Resonance: Controls size of disturbance impact
+              disturbanceRadiusFactor = 0.2 + resonanceVal * 0.8; // Scale the radius in addDisturbance
+
+              // Maybe adjust noise scale too? Faster speed = smaller details?
+              noiseScale = 0.001 + (1 - speedVal) * 0.005;
+
+              // Adjust drone pitch/filter slightly?
+              if (isAudioInitialized && droneFilter) {
+                  droneFilter.frequency.linearRampToValue(60 + speedVal * 80, 0.1);
+              }
+         }
+         // --- Camera Functions (reuse from previous version) ---
+         function initCamera() { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert("Camera not supported."); return; } navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false }).then((stream) => { video.srcObject = stream; video.onloadedmetadata = () => { video.play().catch(e => console.error("Vid play failed:", e)); cameraEnabled = true; prevImageData = null; /* update button/text */ document.getElementById('camera-btn').textContent = "Cam Active"; document.getElementById('camera-btn').classList.add('active'); document.querySelector('#info p:last-child').textContent = "Move to stir the haze."; console.log("Cam init."); }; }).catch((err) => { console.error("Cam error:", err); alert("Could not access camera."); disableCamera(); }); }
+         function disableCamera() { if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; } cameraEnabled = false; prevImageData = null; /* update button/text */ document.getElementById('camera-btn').textContent = "Camera Mode"; document.getElementById('camera-btn').classList.remove('active'); document.querySelector('#info p:last-child').textContent = "Interact to stir the haze."; console.log("Cam disabled."); }
+         function processCameraFeed(currentTime) { if (!cameraEnabled || video.readyState < video.HAVE_METADATA || video.paused || video.ended) return; if (currentTime - lastProcessedCameraTime < cameraProcessInterval) return; lastProcessedCameraTime = currentTime; try { offCtx.save(); offCtx.scale(-1, 1); offCtx.drawImage(video, -offCanvas.width, 0, offCanvas.width, offCanvas.height); offCtx.restore(); const iData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height); if (prevImageData) { const data = iData.data, prevData = prevImageData.data, w = iData.width, h = iData.height, step = 6; for (let y = 0; y < h; y += step) for (let x = 0; x < w; x += step) { const i = (y * w + x) * 4, rD = Math.abs(data[i]-prevData[i]), gD = Math.abs(data[i+1]-prevData[i+1]), bD = Math.abs(data[i+2]-prevData[i+2]), diff = (rD+gD+bD)/3; if (diff > motionThreshold) addDisturbance(x, y, 70, diff / 150); } } prevImageData = iData; } catch (e) { console.error("Cam feed error:", e); } }
+
+        function init() {
+            resizeCanvases(); // Includes thread & grid init
+            setupEventListeners();
+            controlsPanel.classList.add('hidden');
+            infoPanel.classList.add('hidden');
+            uiToggleButton.textContent = '::';
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            lastTime = performance.now();
+            animate(lastTime);
+            console.log("Ocean Loom (Woven Depths) Initialized.");
+            // Prompt user if audio is suspended...
+             setTimeout(() => { if (!isAudioInitialized && audioContext && audioContext.state === 'suspended') { console.log("Audio suspended. Click 'Enable Sound'."); } }, 500);
+        }
+
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>

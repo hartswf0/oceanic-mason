@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobode - Loom of Grit & Soul [Corrected Init]</title>
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <!-- Tone.js loaded dynamically -->
+    <style>
+        :root { /* Same gritty style */
+            --bg-color-top: #04030a; --bg-color-bottom: #0f0610; --text-color: rgba(165, 155, 175, 0.7); --control-bg: rgba(28, 20, 33, 0.9); --control-border: rgba(95, 75, 105, 0.5); --button-bg: rgba(60, 45, 70, 0.85); --button-hover-bg: rgba(80, 60, 90, 0.95); --button-active-border: rgba(155, 115, 165, 0.8); --slider-track: rgba(95, 75, 105, 0.45); --slider-thumb: rgba(155, 115, 165, 0.85); --info-opacity: 0.5; --thread-color-base-hsl: 345, 40%, 16%; --thread-active-l-boost: 10%; --thread-glow-color: hsla(350, 55%, 60%, 0.4); --overlay-color-rgb: 165, 180, 195; --overlay-blend-mode: screen; --overlay-opacity: 0.8; --border-color: #28201d; --border-highlight: rgba(70, 60, 50, 0.4); --border-shadow: rgba(5, 2, 2, 0.4); --border-height: 28px; --vignette-color: rgba(0, 0, 3, 0.35); --particle-color: rgba(180, 190, 210, 0.4); --grain-opacity: 0.04;
+        }
+        html, body { margin:0; padding:0; overflow:hidden; height: 100%; width: 100%; }
+        body { background-color: var(--bg-color-bottom); display:flex; font-family:'Courier New', monospace; color: var(--text-color); }
+        .container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; image-rendering: optimizeSpeed; }
+        #bg-canvas { z-index: 0; pointer-events: none; background-color: transparent; }
+        #main-canvas { z-index: 1; pointer-events: auto; background-color: transparent; }
+        #wave-canvas { z-index: 2; opacity: var(--overlay-opacity); mix-blend-mode: var(--overlay-blend-mode); pointer-events: none; background-color: transparent; }
+        #particle-canvas { z-index: 3; pointer-events: none; background-color: transparent; }
+        #grain-canvas { z-index: 4; pointer-events: none; mix-blend-mode: overlay; opacity: var(--grain-opacity); background-color: transparent; }
+        /* UI Styles - Compacted */
+        .controls { position: absolute; bottom: 12px; left: 12px; z-index: 10; background: var(--control-bg); padding: 8px 12px; border-radius: 3px; font-size: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; transition: transform .35s ease-out, opacity .35s ease-out; border: 1px solid var(--control-border); backdrop-filter: blur(3px); max-width: calc(100% - 24px); }
+        .controls.hidden { transform: translateY(100%) translateY(12px); opacity: 0; pointer-events: none; }
+        .controls button { background: var(--button-bg); color: inherit; border: 1px solid var(--control-border); padding: 4px 8px; margin: 0; cursor: pointer; border-radius: 2px; transition: background-color 0.2s, border-color 0.2s; font-size: inherit; }
+        .controls button:hover { background: var(--button-hover-bg); border-color: rgba(110, 90, 120, 0.6); }
+        .voice-button { opacity: .5; }
+        .voice-button.active { opacity: 1; border-color: var(--button-active-border); background-color: rgba(75, 55, 85, 0.9); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0 4px; }
+        .slider-container span { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .slider { appearance: none; -webkit-appearance: none; width: 65px; height: 3px; background: var(--slider-track); border-radius: 1.5px; cursor: pointer; padding: 4px 0; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 9px; height: 9px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; }
+        .slider::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; border: none; }
+        .title { position: absolute; top: var(--border-height); margin-top: 8px; left: 12px; font-size: 13px; opacity: var(--info-opacity); z-index: 10; transition: opacity .3s ease; pointer-events: none; font-weight: normal; letter-spacing: 0.5px; }
+        .instructions { position: absolute; bottom: 12px; right: 12px; font-size: 10px; opacity: var(--info-opacity); z-index: 10; text-align: right; transition: opacity .3s ease; max-width: 200px; pointer-events: none; line-height: 1.3; }
+        .title.hidden,.instructions.hidden { opacity: 0; }
+        .toggle-ui,.fullscreen-btn { position: absolute; top: 6px; z-index: 20; background: var(--button-bg); border: 1px solid var(--control-border); color: inherit; opacity: 0.75; width: 26px; height: 26px; display: flex; justify-content: center; align-items: center; cursor: pointer; border-radius: 50%; font-size: 14px; transition: background .3s, opacity .3s; }
+        .toggle-ui { right: 12px; }
+        .fullscreen-btn { right: 48px; }
+        .toggle-ui:hover,.fullscreen-btn:hover { background: var(--button-hover-bg); opacity: 1; }
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="bg-canvas"></canvas>
+        <canvas id="main-canvas"></canvas>
+        <canvas id="wave-canvas"></canvas>
+        <canvas id="particle-canvas"></canvas>
+        <canvas id="grain-canvas"></canvas> <!-- Grain Layer -->
+        <video id="video" autoplay playsinline muted></video>
+
+        <div class="title hidden">Nobode</div>
+        <div class="instructions hidden">Loading Ritual...</div>
+
+        <div class="controls hidden">
+            <button id="soundBtn" title="Toggle Audio Output">Enable Sound</button>
+            <button id="pauseBtn" title="Pause/Resume Simulation">Pause</button>
+            <button id="cameraBtn" title="Toggle Camera Input">Camera Off</button>
+            <!-- Voice Toggles -->
+            <div class="control-group">
+                <button class="voice-button active" data-voice="high" title="High Plucks">H</button>
+                <button class="voice-button active" data-voice="mid" title="Mid Plucks">M</button>
+                <button class="voice-button active" data-voice="low" title="Low Plucks">L</button>
+                <button class="voice-button active" data-voice="drone" title="Drone">D</button>
+                <button class="voice-button active" data-voice="memory" title="Echoes">E</button>
+            </div>
+             <!-- Sliders -->
+             <div class="slider-container"><span title="Animation Speed">Flow</span><input type="range" min="0" max="100" value="25" class="slider" id="speedSlider"></div>
+             <div class="slider-container"><span title="Energy Fade Rate (Lower=Faster Fade)">Persistence</span><input type="range" min="0" max="100" value="40" class="slider" id="decaySlider"></div>
+             <div class="slider-container"><span title="Interaction Effect Size">Impact</span><input type="range" min="0" max="100" value="40" class="slider" id="disturbanceSlider"></div>
+            <div class="slider-container"><span title="Overlay Pattern Complexity">Texture</span><input type="range" min="0" max="100" value="65" class="slider" id="noiseScaleSlider"></div>
+            <div class="slider-container"><span title="Number of Particles">Dust</span><input type="range" min="0" max="100" value="15" class="slider" id="particleCountSlider"></div>
+            <div class="slider-container"><span title="Reverb Amount">Resonance</span><input type="range" min="0" max="100" value="75" class="slider" id="reverbSlider"></div>
+            <div class="slider-container"><span title="Audio Distortion Amount">Grit</span><input type="range" min="0" max="100" value="10" class="slider" id="gritSlider"></div> <!-- Grit Slider -->
+        </div>
+        <button class="toggle-ui" title="Toggle Controls Panel">::</button>
+        <button class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+    </div>
+
+    <script type="module">
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // --- Constants & State ---
+        const LOG_LEVEL = { DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+        const currentLogLevel = LOG_LEVEL.INFO; // Use INFO for less console noise
+        const threadCount = 110; const threadWidth = 0.6; const baseThreadLightness = 12;
+        const energyToLightnessFactor = 4; // DEFINED HERE
+        const energyGridResolution = 35; const memoryPulseInterval = 25000; const memoryPulseStrength = 0.04;
+        const soundCheckFrequency = 3; const cameraProcessInterval = 150; const motionThreshold = 35;
+        let MAX_PARTICLES = 80; let currentParticleCount = 15;
+
+        // Elements & Contexts
+        let mainCanvas, mainCtx, waveCanvas, waveCtx, bgCanvas, bgCtx, particleCanvas, particleCtx, grainCanvas, grainCtx, videoElement, offCanvas, offCtx;
+        let controlsPanel, titleElement, instructionsElement, uiToggleButton, fullscreenButton, cameraBtn;
+
+        // Core State
+        let isPaused = false, lastTime = 0, animationFrameId = null, frameCounter = 0;
+        let threads = [], threadSpacing = 0;
+        let visualEnergyGrid = [], nextVisualEnergyGrid = [], memoryGrid = [], nextMemoryGrid = [];
+        let visualEnergyGridWidth = 0, visualEnergyGridHeight = 0;
+        let waveTime = Math.random()*1e3, noiseSpeed = 0.003, noiseScale = 0.007, noiseScaleFine = 0.022;
+        let noiseTextureMix = 0.65;
+        let baseDensity = 0.03, energyToDensityFactor = 5.5;
+        let energyDecay = 0.965, energySpread = 0.02; // Faster decay default
+        let disturbanceRadiusFactor = 0.35;
+        let memoryDecay = 0.998, nextMemoryPulseTime = 0;
+        let noise2D; // Will be initialized in init()
+        let noise2D_fine; // For finer grain noise
+        let noise2D_bg; // For background
+        let particles = [];
+        let grainImageData = null;
+
+        // Audio State
+        let soundEnabled = false, isAudioInitialized = false, audioInitPromise = null;
+        let Tone = window.Tone, reverb = null, delay = null, masterLimiter = null, distortion = null;
+        let synths = { high: null, mid: null, low: null };
+        let drone = { noise: null, filter: null, gain: null, lfo1: null, lfo2: null };
+        let memoryPlayer = null;
+        let voiceStates = { high: true, mid: true, low: true, drone: true, memory: true };
+        const scales = { high: ['C5','Eb5','G5','Bb5','C6'], mid: ['C4','Eb4','G4','Bb4','C5'], low: ['C3','Eb3','G3','Bb3','C4'] };
+        let soundTriggerCounter = 0;
+        let audioGritAmount = 0.1;
+
+        // Camera State
+        let cameraEnabled = false, prevImageData = null, lastProcessedCameraTime = 0;
+
+        // --- Logging ---
+        const log=(l,p,...a)=>{if(l>=currentLogLevel){const s=l===LOG_LEVEL.ERROR?'color:red;font-weight:bold;':l===LOG_LEVEL.WARN?'color:orange;':'';console.log(`%c[${p}]`,s,...a);}};
+
+        // --- Particle Class --- (Simplified for performance)
+        class Particle {
+             constructor(w,h){this.w=w;this.h=h;this.x=Math.random()*w;this.y=Math.random()*h;this.size=0.4+Math.random()*0.6;this.alpha=0.05+Math.random()*0.15;this.vy=-(0.03+Math.random()*0.08);} // Base velocity only
+             update(dt,nT,nS){ this.y+=this.vy*dt*30; if (!noise2D_fine) return; const nX=noise2D_fine(this.x*nS*4,this.y*nS*4+nT*.3)*.5; this.x+=nX*dt*15; if(this.y<-this.size)this.y=this.h+this.size; if(this.x<-this.size)this.x=this.w+this.size; if(this.x>this.w+this.size)this.x=-this.size; }
+             draw(ctx){ if(!ctx) return; ctx.fillStyle=`rgba(180,200,220,${this.alpha})`; ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size); } // Use fillRect - often faster
+         }
+
+        // --- Initialization Functions ---
+        function setupDOMReferences() {
+             log(LOG_LEVEL.DEBUG, 'INIT', "Setting up DOM references...");
+             mainCanvas=document.getElementById('main-canvas'); waveCanvas=document.getElementById('wave-canvas');
+             bgCanvas=document.getElementById('bg-canvas'); particleCanvas=document.getElementById('particle-canvas');
+             grainCanvas=document.getElementById('grain-canvas'); // Get grain canvas
+             videoElement=document.getElementById('video'); controlsPanel=document.querySelector('.controls');
+             titleElement=document.querySelector('.title'); instructionsElement=document.querySelector('.instructions');
+             uiToggleButton=document.querySelector('.toggle-ui'); fullscreenButton=document.querySelector('.fullscreen-btn');
+             cameraBtn=document.getElementById('cameraBtn');
+             if (!mainCanvas || !waveCanvas || !bgCanvas || !particleCanvas || !grainCanvas || !videoElement || !controlsPanel) throw new Error("Essential DOM elements missing!");
+             mainCtx=mainCanvas.getContext('2d',{alpha:!0}); waveCtx=waveCanvas.getContext('2d');
+             bgCtx=bgCanvas.getContext('2d',{alpha:!1}); particleCtx=particleCanvas.getContext('2d');
+             grainCtx = grainCanvas.getContext('2d'); // Get grain context
+             offCanvas=document.createElement('canvas'); offCtx=offCanvas.getContext('2d',{willReadFrequently:!0});
+             if (!mainCtx||!waveCtx||!bgCtx||!particleCtx||!grainCtx||!offCtx) throw new Error("Context failed!");
+             log(LOG_LEVEL.DEBUG, 'INIT', "DOM references and contexts ready.");
+         }
+        function setInstructions(t){if(instructionsElement)instructionsElement.textContent=t;}
+        function initThreads() { /* Same thread init */ log(LOG_LEVEL.DEBUG,'VISUAL',`Init ${threadCount} threads...`);threads=[];if(!mainCanvas||mainCanvas.width<=0)return;threadSpacing=mainCanvas.width/(threadCount+1);const bH=345;for(let i=0;i<threadCount;i++){const sS=.06+Math.random()*.1,sA=.3+Math.random()*.4;threads.push({x:(i+1)*threadSpacing,width:threadWidth*(.9+Math.random()*.2),baseHue:bH+(Math.random()-.5)*10,baseSaturation:40+Math.random()*10,swayOffset:Math.random()*Math.PI*2,swaySpeed:sS,swayAmount:sA,lastPlayTime:0,cooldown:650+Math.random()*500,energyThreshold:.5+Math.random()*.15,glowing:!1,voice:null,note:null});} if(isAudioInitialized)assignSoundToThreads();log(LOG_LEVEL.DEBUG,'VISUAL',`Threads initialized: ${threads.length}`); }
+        function initEnergyAndMemoryGrids() { /* Same grid init */ log(LOG_LEVEL.DEBUG,'CORE',"Init Energy/Memory grids...");if(!mainCanvas||mainCanvas.width<=0)return;visualEnergyGridWidth=Math.ceil(mainCanvas.width/energyGridResolution);visualEnergyGridHeight=Math.ceil(mainCanvas.height/energyGridResolution);if(visualEnergyGridWidth<=0||visualEnergyGridHeight<=0)return;visualEnergyGrid=[];nextVisualEnergyGrid=[];memoryGrid=[];nextMemoryGrid=[];for(let y=0;y<visualEnergyGridHeight;y++){visualEnergyGrid[y]=new Array(visualEnergyGridWidth).fill(0);nextVisualEnergyGrid[y]=new Array(visualEnergyGridWidth).fill(0);memoryGrid[y]=new Array(visualEnergyGridWidth).fill(0);nextMemoryGrid[y]=new Array(visualEnergyGridWidth).fill(0);}log(LOG_LEVEL.DEBUG,'CORE',`Grids initialized (${visualEnergyGridWidth}x${visualEnergyGridHeight})`); }
+        function initParticles() { /* Adjusted for dynamic count */ log(LOG_LEVEL.DEBUG,'VISUAL',`Init particles (Current Count: ${currentParticleCount})...`);particles=[];if(!particleCanvas||particleCanvas.width<=0)return;for(let i=0;i<currentParticleCount;i++){particles.push(new Particle(particleCanvas.width,particleCanvas.height));}log(LOG_LEVEL.DEBUG,'VISUAL',`Particles initialized: ${particles.length}`);}
+        function createGrainPattern(){if(!grainCtx||!grainCanvas||grainCanvas.width<=0)return;log(LOG_LEVEL.DEBUG,'VISUAL',"Generating grain pattern...");grainImageData=grainCtx.createImageData(grainCanvas.width,grainCanvas.height);const d=grainImageData.data;for(let i=0;i<d.length;i+=4){const v=Math.random()*50;d[i]=v;d[i+1]=v;d[i+2]=v;d[i+3]=20+Math.random()*15;}log(LOG_LEVEL.DEBUG,'VISUAL','Grain pattern generated.');}
+        function resizeCanvas() { /* Same logic, plus grain canvas */ log(LOG_LEVEL.INFO,'CORE',"Resize processing.");const c=document.querySelector('.container');if(!c)return;const w=c.offsetWidth,h=c.offsetHeight;if(w===mainCanvas?.width&&h===mainCanvas?.height&&w>0)return;if(w<=0||h<=0)return;log(LOG_LEVEL.INFO,'CORE',`Resizing to ${w}x${h}`);[mainCanvas,waveCanvas,bgCanvas,particleCanvas,grainCanvas].forEach(cn=>{if(cn){cn.width=w;cn.height=h;}});if(offCanvas){offCanvas.width=w;offCanvas.height=h;}initThreads();initEnergyAndMemoryGrids();initParticles();createGrainPattern();requestAnimationFrame(()=>{if(!isPaused){drawBackground();drawStaticElements();drawWaveOverlay();drawParticles();drawGrain();}});log(LOG_LEVEL.INFO,'CORE',"Resize complete.");}
+
+        // --- Core Logic Functions ---
+        function updateVisualEnergyGridAndMemory(){const now=performance.now();if(!visualEnergyGrid||!memoryGrid||visualEnergyGrid.length===0)return;const pulseThisFrame=now>nextMemoryPulseTime;if(pulseThisFrame){nextMemoryPulseTime=now+memoryPulseInterval*(.7+Math.random()*.6);} for(let y=0;y<visualEnergyGridHeight;y++){if(!visualEnergyGrid[y]||!nextVisualEnergyGrid[y]||!memoryGrid[y]||!nextMemoryGrid[y])continue;for(let x=0;x<visualEnergyGridWidth;x++){let cE=visualEnergyGrid[y][x]||0,cM=memoryGrid[y][x]||0,sE=0;sE+=visualEnergyGrid[y-1]?.[x]||0;sE+=visualEnergyGrid[y+1]?.[x]||0;sE+=visualEnergyGrid[y]?.[x-1]||0;sE+=visualEnergyGrid[y]?.[x+1]||0;let nE=cE*energyDecay+sE*(energySpread/4);let nM=cM*memoryDecay+cE*(1-memoryDecay)*.5;if(pulseThisFrame&&cM>.08){nE+=cM*memoryPulseStrength*(.4+Math.random()*.6);if(memoryPlayer&&voiceStates.memory&&Math.random()<.06){const freq=Tone.Midi(Tone.Frequency(scales.mid[Math.floor(Math.random()*scales.mid.length)]).toMidi()+(Math.random()-.5)*4).toFrequency();try{memoryPlayer.triggerAttackRelease(freq,"32n",Tone.context.currentTime+Math.random()*.08);}catch(e){}}} nextVisualEnergyGrid[y][x]=Math.max(0,Math.min(1.0,nE));nextMemoryGrid[y][x]=Math.max(0,Math.min(1.0,nM));}} [visualEnergyGrid,nextVisualEnergyGrid]=[nextVisualEnergyGrid,visualEnergyGrid];[memoryGrid,nextMemoryGrid]=[nextMemoryGrid,memoryGrid];}
+        function getEnergyAt(x,y){if(!visualEnergyGrid||visualEnergyGrid.length===0)return 0;const gXf=x/energyGridResolution,gYf=y/energyGridResolution,gX0=Math.floor(gXf),gY0=Math.floor(gYf),gX1=gX0+1,gY1=gY0+1;if(gY0<0||gY1>=visualEnergyGridHeight||gX0<0||gX1>=visualEnergyGridWidth)return 0;const tx=gXf-gX0,ty=gYf-gY0;try{const e00=visualEnergyGrid[gY0]?.[gX0]||0,e10=visualEnergyGrid[gY0]?.[gX1]||0,e01=visualEnergyGrid[gY1]?.[gX0]||0,e11=visualEnergyGrid[gY1]?.[gX1]||0;const ex0=e00+(e10-e00)*tx,ex1=e01+(e11-e01)*tx;return Math.max(0,Math.min(1.0,ex0+(ex1-ex0)*ty));}catch(e){return 0;}}
+        function updateParticles(dt){if(particles.length>0 && noise2D_fine) particles.forEach(p=>p.update(dt,waveTime,noiseScaleFine));} // Pass fine noise scale
+
+        // --- Drawing Functions ---
+        function drawBackground(){if(!bgCtx||!bgCanvas||bgCanvas.width<=0)return;const grad=bgCtx.createLinearGradient(0,0,0,bgCanvas.height);grad.addColorStop(0,getComputedStyle(document.documentElement).getPropertyValue('--bg-color-top'));grad.addColorStop(1,getComputedStyle(document.documentElement).getPropertyValue('--bg-color-bottom'));bgCtx.fillStyle=grad;bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);const vigCol=getComputedStyle(document.documentElement).getPropertyValue('--vignette-color');const cx=bgCanvas.width/2,cy=bgCanvas.height/2,oR=Math.sqrt(cx*cx+cy*cy);const vigGrad=bgCtx.createRadialGradient(cx,cy,oR*.3,cx,cy,oR);vigGrad.addColorStop(0,'rgba(0,0,0,0)');vigGrad.addColorStop(1,vigCol);bgCtx.fillStyle=vigGrad;bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);}
+        function drawStaticElements() {
+             const localEnergyToLightFactor = typeof energyToLightnessFactor !== 'undefined' ? energyToLightnessFactor : 4; // Use local copy or default
+             if (!mainCtx || !mainCanvas || mainCanvas.width <= 0) return;
+             try {
+                 mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                 const borderHeight=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--border-height'));mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-color');mainCtx.fillRect(0,0,mainCanvas.width,borderHeight);const bw=mainCanvas.width;for(let i=0;i<100;i++){mainCtx.strokeStyle=`rgba(200,180,170,${.01+Math.random()*.025})`;mainCtx.lineWidth=Math.random()*.7;mainCtx.beginPath();const x=Math.random()*bw,y=Math.random()*borderHeight;mainCtx.moveTo(x,y);mainCtx.lineTo(x+Math.random()*25-12,y+Math.random()*4-2);mainCtx.stroke();} mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-shadow');mainCtx.fillRect(0,0,mainCanvas.width,2);mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-highlight');mainCtx.fillRect(0,borderHeight-2,mainCanvas.width,2);
+                 const time=performance.now()/1e3;const[baseH,baseS,baseL_css]=getComputedStyle(document.documentElement).getPropertyValue('--thread-color-base-hsl').split(',').map(s=>parseFloat(s));const threadActiveBoost=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--thread-active-l-boost'))||8;
+
+                 threads.forEach(thread=>{
+                     const e=getEnergyAt(thread.x,mainCanvas.height*.6); const glowFactor=thread.glowing?1:0;
+                     const l=(baseL_css+e*localEnergyToLightFactor+glowFactor*threadActiveBoost); const s=thread.baseSaturation+glowFactor*5;
+                     mainCtx.strokeStyle=`hsl(${thread.baseHue},${s}%,${l}%)`; mainCtx.lineWidth=thread.width*(.85+e*.15);
+                     mainCtx.globalAlpha=.4+e*.5+glowFactor*.3; // Slightly less opacity variation
+
+                     const swayX=Math.sin(time*thread.swaySpeed+thread.swayOffset)*thread.swayAmount;
+                     mainCtx.beginPath(); const segments=6; const stepY=(mainCanvas.height-borderHeight)/segments;
+                     mainCtx.moveTo(thread.x+swayX,borderHeight);
+                     for(let i=1;i<=segments;i++){const y=borderHeight+i*stepY;const currentSway=swayX*(1-i/segments*.6);const texOffset=(noise2D_fine(thread.x*0.1, y*0.05 + time*5) - 0.5) * 0.5; mainCtx.lineTo(thread.x+currentSway+texOffset,y);} // Use defined noise instance
+                     mainCtx.stroke();
+                     if(glowFactor>0){mainCtx.globalCompositeOperation='lighter';mainCtx.lineWidth=thread.width*1.8;mainCtx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--thread-glow-color');mainCtx.globalAlpha=.65*glowFactor;mainCtx.stroke();mainCtx.globalCompositeOperation='source-over';mainCtx.globalAlpha=1.0;}
+                     mainCtx.globalAlpha=1.0;});
+             } catch (e) { log(LOG_LEVEL.ERROR,'DRAW','Error in drawStaticElements:',e);isPaused=!0; }
+         }
+        function drawWaveOverlay(){if(!waveCtx||!visualEnergyGrid||visualEnergyGrid.length===0||!waveCanvas||waveCanvas.width<=0)return;waveCtx.clearRect(0,0,waveCanvas.width,waveCanvas.height);const sampleStep=6;const time=waveTime;const overlayColorRGB=getComputedStyle(document.documentElement).getPropertyValue('--overlay-color-rgb').trim().split(',').map(Number);const[rBase,gBase,bBase]=overlayColorRGB;for(let y=0;y<waveCanvas.height;y+=sampleStep){for(let x=0;x<waveCanvas.width;x+=sampleStep){const nValBase=(noise2D(x*noiseScale,y*noiseScale+time)+1)/2;const nValFine=(noise2D_fine(x*noiseScaleFine,y*noiseScaleFine-time*.8)+1)/2;const nVal=nValBase*(1-noiseTextureMix)+nValFine*noiseTextureMix;const lEnergy=getEnergyAt(x,y);const dens=baseDensity+lEnergy*energyToDensityFactor*nVal;const alphaRaw=Math.min(.95,Math.max(0,dens));if(alphaRaw>.015){const displayAlpha=Math.pow(alphaRaw,overlaySharpness)*(0.7+noise2D_fine(x*0.1,y*0.1-time*0.2)*0.3);const colorNoise=(noise2D_fine(x*0.02+100,y*0.02+time*0.1)+1)/2;const r=rBase+(colorNoise-.5)*40*lEnergy;const g=gBase+(colorNoise-.5)*25*lEnergy;const b=bBase+(colorNoise-.5)*50*lEnergy;waveCtx.fillStyle=`rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${displayAlpha})`;waveCtx.fillRect(x,y,sampleStep,sampleStep);}}}}
+        function drawParticles(){if(!particleCtx||!particleCanvas||particleCanvas.width<=0||particles.length===0)return;particleCtx.clearRect(0,0,particleCanvas.width,particleCanvas.height);particles.forEach(p=>p.draw(particleCtx));}
+        function drawGrain(){if(grainImageData&&grainCtx){grainCtx.putImageData(grainImageData,0,0);}}
+
+        // --- Audio Functions --- (Added check for synth existence)
+        function preloadTone(){if(!audioInitPromise){log(LOG_LEVEL.INFO,'AUDIO',"Preloading Tone.js...");audioInitPromise=new Promise((res,rej)=>{if(window.Tone?.start){Tone=window.Tone;res();return;}const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js';s.async=!0;s.onload=()=>{if(window.Tone?.start){Tone=window.Tone;res();}else{rej(new Error("Tone invalid after load."));}};s.onerror=err=>rej(err);document.head.appendChild(s);});}return audioInitPromise;}
+        async function initAudio(){if(isAudioInitialized)return!0;log(LOG_LEVEL.INFO,'AUDIO',"Attempting audio init...");setInstructions("Conjuring sound...");try{await preloadTone();if(!Tone)throw new Error("Tone unavailable.");if(Tone.context.state!=='running'){await Tone.start();}log(LOG_LEVEL.INFO,'AUDIO',"Context running.");masterLimiter=new Tone.Limiter(-4).toDestination();distortion=new Tone.Distortion(audioGritAmount*0.35).connect(masterLimiter);reverb=new Tone.Reverb({decay:2.8,preDelay:.015,wet:.55}).connect(distortion);await reverb.generate();delay=new Tone.FeedbackDelay({delayTime:"8n.",feedback:.25,wet:.22}).connect(reverb);log(LOG_LEVEL.DEBUG,'AUDIO',"Effects ready.");const synthOpts={attackNoise:.9,dampening:3000,resonance:.88,release:1.0,volume:-18};synths.high=new Tone.PluckSynth({...synthOpts,dampening:3500,volume:-20}).connect(delay);synths.mid=new Tone.PluckSynth({...synthOpts,dampening:2800,volume:-18}).connect(delay);synths.low=new Tone.PluckSynth({...synthOpts,dampening:2000,release:1.4,volume:-16}).connect(delay);log(LOG_LEVEL.DEBUG,'AUDIO',"Plucks ready.");drone.gain=new Tone.Gain(0).connect(reverb);drone.filter=new Tone.Filter(60,"lowpass",-12).connect(drone.gain);drone.lfo1=new Tone.LFO({frequency:.03+Math.random()*.03,min:50,max:100,amplitude:1}).connect(drone.filter.frequency).start();drone.lfo2=new Tone.LFO({frequency:.1+Math.random()*.1,min:-5,max:5,amplitude:1}).connect(drone.noise.detune).start(); drone.noise=new Tone.Noise("brown").connect(drone.filter).start();drone.gain.gain.rampTo(voiceStates.drone?.08:0,7);log(LOG_LEVEL.DEBUG,'AUDIO',"Drone ready.");memoryPlayer=new Tone.NoiseSynth({noise:{type:'brown'},filter:{type:'bandpass',Q:3,frequency:400},envelope:{attack:.005,decay:.1,sustain:0,release:.15},volume:-32}).connect(delay);log(LOG_LEVEL.DEBUG,'AUDIO',"Memory player ready.");isAudioInitialized=!0;soundEnabled=!0;if(document.getElementById('soundBtn'))document.getElementById('soundBtn').textContent="Sound Off";assignSoundToThreads();setInstructions("Ritual active. Weave.");log(LOG_LEVEL.INFO,'AUDIO',"Audio init complete.");return!0}catch(e){log(LOG_LEVEL.ERROR,'AUDIO',"Audio init failed:",e);setInstructions(`Sound ritual failed.`);isAudioInitialized=!1;soundEnabled=!1;if(document.getElementById('soundBtn'))document.getElementById('soundBtn').textContent="Enable Sound";reverb?.dispose();delay?.dispose();masterLimiter?.dispose();distortion?.dispose();Object.values(synths).forEach(s=>s?.dispose());drone.noise?.dispose();drone.filter?.dispose();drone.gain?.dispose();drone.lfo1?.dispose();drone.lfo2?.dispose();memoryPlayer?.dispose();return!1}}
+        function assignSoundToThreads(){/* Same */ if(!threads||!isAudioInitialized)return;log(LOG_LEVEL.DEBUG,'AUDIO',"Assigning sounds...");const third=Math.ceil(threadCount/3),segSize=Math.max(1,Math.floor(third/scales.high.length));threads.forEach((t,i)=>{let v,nIB;if(i<third){v='high';nIB=i;}else if(i<third*2){v='mid';nIB=i-third;}else{v='low';nIB=i-third*2;} const sc=scales[v];if(!sc)return;const nI=Math.min(sc.length-1,Math.floor(nIB/segSize));t.voice=v;t.note=sc[nI];});log(LOG_LEVEL.INFO,'AUDIO',"Sounds assigned.");}
+        function updateThreadSounds(){if(!soundEnabled||!isAudioInitialized)return;soundTriggerCounter++;if(soundTriggerCounter%soundCheckFrequency!==0)return;const now=Tone.now();threads.forEach(t=>{if(!t.voice||!voiceStates[t.voice]||!synths[t.voice])return;const energy=getEnergyAt(t.x,mainCanvas.height/2);if(energy>t.energyThreshold&&now>=t.lastPlayTime+t.cooldown/1e3){const vel=Math.min(.8,.1+energy*.85);const detuneAmt=(Math.random()-.5)*15*audioGritAmount;try{if(synths[t.voice]){synths[t.voice].triggerAttack(t.note,now+.03,vel);synths[t.voice].set({detune:detuneAmt});}}catch(e){log(LOG_LEVEL.WARN,'AUDIO',`Trigger ${t.voice} error:`,e)} t.lastPlayTime=now;t.glowing=!0;setTimeout(()=>t.glowing=!1,150);}else if(energy<.05&&t.glowing)t.glowing=!1;});}
+
+        // --- Interaction Functions ---
+        function addDisturbance(cX,cY,r=10,s=1){log(LOG_LEVEL.DEBUG,'INTERACT',`Dist @(${cX.toFixed(0)},${cY.toFixed(0)}) R:${r} S:${s.toFixed(2)}`);const gX=Math.floor(cX/energyGridResolution),gY=Math.floor(cY/energyGridResolution),gR=Math.max(1,Math.ceil(r/energyGridResolution*disturbanceRadiusFactor));for(let dy=-gR;dy<=gR;dy++)for(let dx=-gR;dx<=gR;dx++){const gx=gX+dx,gy=gY+dy;if(visualEnergyGrid[gy]?.[gx]!==undefined){const dist=Math.sqrt(dx*dx+dy*dy);if(dist<=gR){const falloff=Math.pow(Math.max(0,1-dist/gR),1.8);const impact=s*falloff*1.05;visualEnergyGrid[gy][gx]=Math.min(1.0,visualEnergyGrid[gy][gx]+impact);}}} if(soundEnabled&&isAudioInitialized){let cI=-1,mD=Infinity;threads.forEach((t,i)=>{const d=Math.abs(t.x-cX);if(d<mD){mD=d;cI=i;}});if(cI!==-1&&mD<threadSpacing*1.6){const t=threads[cI];if(t.voice&&voiceStates[t.voice]&&synths[t.voice]){const n=Tone.now();if(n>=t.lastPlayTime+(t.cooldown/1e3)*.15){const vel=Math.min(.95,.35+s*.6);const detuneAmt=(Math.random()-.5)*25*audioGritAmount;try{if(synths[t.voice]){synths[t.voice].triggerAttack(t.note,n+.01,vel);synths[t.voice].set({detune:detuneAmt});}}catch(e){} t.lastPlayTime=n;t.glowing=!0;setTimeout(()=>t.glowing=!1,150);}}}}}
+        function updateParametersFromSliders(){try{noiseSpeed=.001+(parseInt(document.getElementById('speedSlider')?.value??25)/100)*.014;energyDecay=.93+(parseInt(document.getElementById('decaySlider')?.value??40)/100)*.068;disturbanceRadiusFactor=.1+(parseInt(document.getElementById('disturbanceSlider')?.value??40)/100)*.8;noiseScale=0.003+(parseInt(document.getElementById('noiseScaleSlider')?.value??65)/100)*.01;noiseScaleFine=noiseScale*3;const targetParticleCount=parseInt(document.getElementById('particleCountSlider')?.value??15);if(targetParticleCount!==currentParticleCount){currentParticleCount=Math.min(targetParticleCount,MAX_PARTICLES);initParticles();}if(isAudioInitialized){if(reverb?.wet)reverb.wet.value=parseInt(document.getElementById('reverbSlider')?.value??75)/100;audioGritAmount=parseInt(document.getElementById('gritSlider')?.value??10)/100;if(distortion)distortion.distortion=audioGritAmount*0.45;}log(LOG_LEVEL.DEBUG,'PARAM',`Params updated: decay=${energyDecay.toFixed(4)}, particles=${currentParticleCount}, grit=${audioGritAmount.toFixed(2)}`);}catch(e){log(LOG_LEVEL.ERROR,'PARAM',"Slider update error:",e);}}
+
+        // --- Camera Functions ---
+        function initCamera(){log(LOG_LEVEL.INFO,'CAMERA','Init camera...');if(!navigator.mediaDevices?.getUserMedia){log(LOG_LEVEL.ERROR,'CAMERA',"getUserMedia unsupported.");setInstructions("Camera not supported.");return;} if(!videoElement){log(LOG_LEVEL.ERROR,'CAMERA',"Video element missing.");return;} navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:!1}).then(stream=>{videoElement.srcObject=stream;videoElement.onloadedmetadata=()=>{videoElement.play().then(()=>{cameraEnabled=!0;prevImageData=null;if(cameraBtn)cameraBtn.textContent="Camera On";setInstructions("Move to weave.");log(LOG_LEVEL.INFO,'CAMERA',"Camera ready.");}).catch(e=>{log(LOG_LEVEL.ERROR,'CAMERA',"Video play failed:",e);disableCamera();});};}).catch(err=>{log(LOG_LEVEL.ERROR,'CAMERA',"Error accessing camera:",err);setInstructions(`Camera Error: ${err.message}`);cameraEnabled=!1;if(cameraBtn)cameraBtn.textContent="Camera Off";});}
+        function disableCamera(){log(LOG_LEVEL.INFO,'CAMERA','Disabling camera...');if(videoElement?.srcObject){videoElement.srcObject.getTracks().forEach(t=>t.stop());videoElement.srcObject=null;videoElement.load();} cameraEnabled=!1;prevImageData=null;if(cameraBtn)cameraBtn.textContent="Camera Off";setInstructions("Click 'Enable Sound', then weave.");}
+        function processCameraFeed(currentTime){if(!cameraEnabled||!videoElement||videoElement.paused||videoElement.ended||videoElement.readyState<videoElement.HAVE_METADATA)return;if(currentTime-lastProcessedCameraTime<cameraProcessInterval)return;lastProcessedCameraTime=currentTime;try{if(!offCtx||!offCanvas)return;offCtx.save();offCtx.scale(-1,1);offCtx.drawImage(videoElement,-offCanvas.width,0,offCanvas.width,offCanvas.height);offCtx.restore();const cID=offCtx.getImageData(0,0,offCanvas.width,offCanvas.height);if(prevImageData){const data=cID.data,pData=prevImageData.data,w=cID.width,h=cID.height,step=8;for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){const i=(y*w+x)*4,rD=Math.abs(data[i]-pData[i]),gD=Math.abs(data[i+1]-pData[i+1]),bD=Math.abs(data[i+2]-pData[i+2]),diff=(rD+gD+bD)/3;if(diff>motionThreshold)addDisturbance(x,y,65,diff/115);}}prevImageData=cID;}catch(e){log(LOG_LEVEL.ERROR,'CAMERA',"Error processing camera feed:",e);}}
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners(){log(LOG_LEVEL.INFO,'INIT',"Setting up event listeners...");let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(resizeCanvas,150);});const hPD=(e)=>{if(!isPaused&&!cameraEnabled){e.preventDefault();mainCanvas.style.cursor='grabbing';mainCanvas.setPointerCapture(e.pointerId);addDisturbance(e.clientX,e.clientY,100,1.0);}};const hPM=(e)=>{if(!isPaused&&!cameraEnabled&&e.buttons===1&&mainCanvas.hasPointerCapture(e.pointerId)){e.preventDefault();addDisturbance(e.clientX,e.clientY,80,0.5);}};const rP=(e)=>{mainCanvas.style.cursor='grab';if(mainCanvas.hasPointerCapture(e.pointerId))mainCanvas.releasePointerCapture(e.pointerId);};mainCanvas.style.cursor='grab';mainCanvas.addEventListener('pointerdown',hPD);mainCanvas.addEventListener('pointermove',hPM);mainCanvas.addEventListener('pointerup',rP);mainCanvas.addEventListener('pointerleave',rP);mainCanvas.addEventListener('pointercancel',rP);mainCanvas.addEventListener('contextmenu',e=>e.preventDefault());document.getElementById('pauseBtn')?.addEventListener('click',function(){isPaused=!isPaused;this.textContent=isPaused?'Resume':'Pause';log(LOG_LEVEL.INFO,'UI',`Sim ${isPaused?'Paused':'Resumed'}`);});document.getElementById('soundBtn')?.addEventListener('click',async function(){/* Sound Toggle Logic */ if(!isAudioInitialized&&!soundEnabled){log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked");this.textContent="Loading...";this.disabled=!0;const s=await initAudio();if(s){this.textContent="Sound Off";}else{this.textContent="Sound Error";}this.disabled=!1;}else if(soundEnabled){log(LOG_LEVEL.INFO,'UI',"Disable Sound clicked");soundEnabled=!1;this.textContent="Enable Sound";}else{log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked (Re-enable)");soundEnabled=!0;if(!isAudioInitialized){const s=await initAudio();if(!s){soundEnabled=!1;this.textContent="Sound Error";return;}} this.textContent="Sound Off";}});cameraBtn?.addEventListener('click',function(){if(!cameraEnabled)initCamera();else disableCamera();});document.querySelectorAll('.voice-button').forEach(b=>b.addEventListener('click',function(){const v=this.dataset.voice;if(v){voiceStates[v]=!voiceStates[v];this.classList.toggle('active');log(LOG_LEVEL.INFO,'UI',`Voice ${v} ${voiceStates[v]?'ON':'OFF'}`);if(v==='drone'&&drone.gain)drone.gain.gain.linearRampTo(voiceStates.drone?.08:0,1);}}));document.getElementById('reverbSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('speedSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('decaySlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('disturbanceSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('noiseScaleSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('particleCountSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('gritSlider')?.addEventListener('input',updateParametersFromSliders);uiToggleButton?.addEventListener('click',()=>{const h=controlsPanel.classList.toggle('hidden');titleElement.classList.toggle('hidden',h);instructionsElement.classList.toggle('hidden',h);});fullscreenButton?.addEventListener('click',()=>{try{if(document.fullscreenElement)document.exitFullscreen();else document.querySelector('.container')?.requestFullscreen();}catch(e){}});log(LOG_LEVEL.INFO,'INIT',"Event listeners attached.");}
+
+        // --- Animation Loop ---
+        function animate(currentTime) {
+            animationFrameId = requestAnimationFrame(animate);
+            const now = performance.now(); if (!lastTime) lastTime = now;
+            const deltaTime = Math.min(50, now - lastTime); // ms
+            lastTime = now;
+            try {
+                if (!isPaused) {
+                    waveTime += noiseSpeed * (deltaTime / 16.67); // Adjust speed based on approx 60fps
+                    updateVisualEnergyGridAndMemory(); updateThreadSounds(); updateParticles(deltaTime);
+                    if (cameraEnabled) processCameraFeed(currentTime);
+                }
+                drawBackground(); drawStaticElements(); drawWaveOverlay(); drawParticles(); drawGrain();
+                frameCounter++;
+            } catch (error) { log(LOG_LEVEL.ERROR,'LOOP',"Anim loop error:",error); isPaused=true; if(document.getElementById('pauseBtn'))document.getElementById('pauseBtn').textContent='ERR!'; setInstructions("Runtime Error!"); cancelAnimationFrame(animationFrameId); }
+        }
+
+        // --- Global Init ---
+        function init() {
+            log(LOG_LEVEL.INFO, 'INIT', "===== Initializing Nobode Loom [Grit v2 - Corrected Init] =====");
+            try {
+                // Initialize Noise generators HERE, before resize calls drawing
+                noise2D = createNoise2D(Math.random);
+                noise2D_fine = createNoise2D(Math.random);
+                noise2D_bg = createNoise2D(Math.random);
+
+                setupDOMReferences();
+                resizeCanvas(); // Initial setup (includes creating grain pattern)
+                setupEventListeners();
+
+                controlsPanel?.classList.add('hidden'); titleElement?.classList.add('hidden'); instructionsElement?.classList.add('hidden');
+                nextMemoryPulseTime = performance.now() + memoryPulseInterval * (0.5 + Math.random());
+
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                frameCounter = 0; lastTime = 0;
+                updateParametersFromSliders(); // Set initial values AFTER elements exist
+                animationFrameId = requestAnimationFrame(animate);
+                log(LOG_LEVEL.INFO, 'INIT', "Initialization complete. Animation loop started.");
+                setInstructions("Click 'Enable Sound', then weave.");
+
+            } catch (error) { log(LOG_LEVEL.ERROR,'INIT',"Initialization failed:",error); setInstructions("Initialization Error!"); alert(`Init Error: ${error.message}`); }
+        }
+
+        // --- Start ---
+        if (document.readyState === 'loading') { window.addEventListener('DOMContentLoaded', init); }
+        else { init(); } // DOM already ready
+
+    </script>
+</body>
+</html>

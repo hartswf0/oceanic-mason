@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom — Wave Reactive Textile</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', monospace;
+            color: rgba(100, 180, 255, 0.7);
+            touch-action: none;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #main-canvas {
+            z-index: 1;
+        }
+        
+        #echo-canvas {
+            z-index: 2;
+            opacity: 0.8;
+        }
+        
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 30, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            transition: transform 0.3s;
+        }
+        
+        .controls.hidden {
+            transform: translateY(150%);
+        }
+        
+        button {
+            background: rgba(20, 40, 80, 0.6);
+            color: rgba(160, 200, 255, 0.9);
+            border: 1px solid rgba(100, 180, 255, 0.5);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: rgba(40, 80, 120, 0.7);
+        }
+        
+        button.active {
+            background: rgba(60, 120, 160, 0.8);
+            box-shadow: 0 0 10px rgba(100, 180, 255, 0.4);
+        }
+        
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 5px;
+        }
+        
+        .slider-container span {
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100px;
+            height: 3px;
+            background: rgba(100, 180, 255, 0.3);
+            border-radius: 2px;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: rgba(120, 180, 255, 0.8);
+            cursor: pointer;
+        }
+        
+        #info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 10, 30, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 300px;
+            text-align: right;
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            transition: opacity 0.3s;
+        }
+        
+        #info.hidden {
+            opacity: 0;
+        }
+        
+        .toggle-ui {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 101;
+            width: 40px;
+            height: 40px;
+            background: rgba(10, 20, 30, 0.7);
+            border: 1px solid rgba(100, 180, 255, 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            color: rgba(160, 200, 255, 0.9);
+            font-size: 20px;
+        }
+        
+        /* Hidden video element for camera feed */
+        video {
+            display: none;
+        }
+        
+        .philosophy {
+            font-size: 0.8rem;
+            opacity: 0.6;
+            font-style: italic;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="echo-canvas"></canvas>
+    </div>
+    
+    <video id="video" autoplay playsinline></video>
+    
+    <div id="controls">
+        <button id="reset-btn">Reset</button>
+        <button id="sound-btn">Enable Sound</button>
+        <button id="camera-btn">Camera Mode</button>
+        <button id="fullscreen-btn">Fullscreen</button>
+        
+        <div class="slider-container">
+            <span>Wave Speed</span>
+            <input type="range" min="0" max="100" value="50" class="slider" id="speed-slider">
+        </div>
+        
+        <div class="slider-container">
+            <span>Ocean Depth</span>
+            <input type="range" min="0" max="100" value="70" class="slider" id="decay-slider">
+        </div>
+        
+        <div class="slider-container">
+            <span>Wave Intensity</span>
+            <input type="range" min="0" max="100" value="60" class="slider" id="resonance-slider">
+        </div>
+    </div>
+    
+    <div id="info">
+        <h3>Ocean Loom</h3>
+        <p>A meditative ocean textile that responds to your movement</p>
+        <p>Click/touch to create waves or enable camera mode</p>
+        <p class="philosophy">A non-extractive computational meditation on digital sovereignty</p>
+    </div>
+    
+    <div class="toggle-ui">≡</div>
+    
+    <script>
+        // Canvas and context setup
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        
+        const echoCanvas = document.getElementById('echo-canvas');
+        const echoCtx = echoCanvas.getContext('2d');
+        
+        // Global state
+        let soundEnabled = false;
+        let isAudioInitialized = false;
+        let cameraEnabled = false;
+        let isPaused = false;
+        let lastTime = 0;
+        
+        // Thread system variables
+        const threadCount = 120;
+        let threads = [];
+        let threadWidth = 1.5;
+        let threadSpacing;
+        
+        // Wave and animation parameters
+        let waveTime = 0;
+        let waveSpeed = 0.002; // Much slower wave speed for meditative effect
+        let waveFrequency = 0.005; // Lower frequency for longer, gentler waves
+        let decayRate = 0.008; // Slower decay for longer-lasting, reflective waves
+        
+        // Conway Game of Life for wave crashes - less aggressive
+        const conwayGridSize = 80; // Balanced resolution Conway grid
+        let conwayGrid = [];
+        let nextConwayGrid = [];
+        let conwayActive = false;
+        let conwayThreshold = 0.6; // Higher threshold for less frequent activation
+        let conwayUpdateRate = 5; // Slower update rate for more contemplative patterns
+        let conwayFrameCount = 0;
+        
+        // Erosion and blending parameters - gentler for meditation
+        let erosionRate = 0.015;
+        let blendFactor = 0.12;
+        let randomMovementFactor = 0.15; // Less random movement for calmer experience
+        
+        // Slit scan history
+        const historyLength = 150; // Even longer history for deeper trails
+        let slitHistory = [];
+        let slitPosition = 0;
+        
+        // Camera and motion detection variables
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d');
+        let motionThreshold = 20;
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 80;
+        
+        // Audio context and nodes
+        let audioCtx;
+        let masterGain;
+        let threadOscillators = [];
+        let threadGains = [];
+        let reverbNode;
+        let audioInitialized = false;
+        
+        // Initialize audio system
+        function initAudio() {
+            try {
+                // Create audio context
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create master gain node
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.3; // Lower overall volume for meditation
+                masterGain.connect(audioCtx.destination);
+                
+                // Create reverb for ocean ambience
+                reverbNode = audioCtx.createConvolver();
+                
+                // Generate reverb impulse response for ocean sound
+                const reverbLength = 3; // 3 seconds of reverb
+                const sampleRate = audioCtx.sampleRate;
+                const impulseLength = sampleRate * reverbLength;
+                const impulseResponse = audioCtx.createBuffer(2, impulseLength, sampleRate);
+                
+                // Fill impulse response with decaying noise for ocean reverb
+                for (let channel = 0; channel < 2; channel++) {
+                    const impulseData = impulseResponse.getChannelData(channel);
+                    for (let i = 0; i < impulseLength; i++) {
+                        // Exponential decay with slight randomness for ocean sound
+                        const decay = Math.exp(-3 * i / impulseLength);
+                        impulseData[i] = (Math.random() * 2 - 1) * decay * 0.5;
+                    }
+                }
+                
+                reverbNode.buffer = impulseResponse;
+                reverbNode.connect(masterGain);
+                
+                // Create oscillators and gains for each thread
+                for (let i = 0; i < threads.length; i++) {
+                    // Create oscillator
+                    const oscillator = audioCtx.createOscillator();
+                    const baseFreq = 100 + (i * 25); // Base frequency spread
+                    oscillator.type = 'sine';
+                    oscillator.frequency.value = baseFreq;
+                    
+                    // Create gain node for this oscillator
+                    const gainNode = audioCtx.createGain();
+                    gainNode.gain.value = 0;
+                    
+                    // Connect oscillator to gain, then to reverb for ocean effect
+                    oscillator.connect(gainNode);
+                    gainNode.connect(reverbNode);
+                    
+                    // Start oscillator
+                    oscillator.start();
+                    
+                    // Store references
+                    threadOscillators[i] = oscillator;
+                    threadGains[i] = gainNode;
+                }
+                
+                // Create low frequency ocean background sound
+                const oceanBackground = audioCtx.createOscillator();
+                oceanBackground.type = 'sine';
+                oceanBackground.frequency.value = 60; // Low frequency for deep ocean
+                
+                const oceanGain = audioCtx.createGain();
+                oceanGain.gain.value = 0.05; // Very subtle
+                
+                // Add modulation to the ocean background
+                const oceanLFO = audioCtx.createOscillator();
+                oceanLFO.type = 'sine';
+                oceanLFO.frequency.value = 0.05; // Very slow modulation
+                
+                const oceanLFOGain = audioCtx.createGain();
+                oceanLFOGain.gain.value = 10; // Modulation amount
+                
+                oceanLFO.connect(oceanLFOGain);
+                oceanLFOGain.connect(oceanBackground.frequency);
+                
+                oceanLFO.start();
+                oceanBackground.start();
+                
+                oceanBackground.connect(oceanGain);
+                oceanGain.connect(reverbNode);
+                
+                audioInitialized = true;
+                console.log("Audio initialized successfully");
+            } catch (e) {
+                console.error("Error initializing audio:", e);
+            }
+        }
+        
+        // Update audio based on thread energy
+        function updateAudio() {
+            if (!audioInitialized) return;
+            
+            try {
+                for (let i = 0; i < threads.length; i++) {
+                    const thread = threads[i];
+                    if (i < threadOscillators.length) {
+                        // Update frequency based on thread energy
+                        const baseFreq = 100 + (i * 25);
+                        const targetFreq = baseFreq + (thread.energy * 200);
+                        
+                        // Smooth frequency transition for more meditative sound
+                        const oscillator = threadOscillators[i];
+                        oscillator.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
+                        
+                        // Update gain based on thread energy
+                        const gainNode = threadGains[i];
+                        const targetGain = thread.energy * 0.1; // Lower gain for meditation
+                        gainNode.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
+                    }
+                }
+            } catch (e) {
+                console.error("Error updating audio:", e);
+            }
+        }
+        
+        // Resize canvases to fill window
+        function resizeCanvases() {
+            mainCanvas.width = window.innerWidth;
+            mainCanvas.height = window.innerHeight;
+            
+            echoCanvas.width = window.innerWidth;
+            echoCanvas.height = window.innerHeight;
+            
+            // Also resize offscreen canvas for camera processing
+            if (offCanvas) {
+                offCanvas.width = window.innerWidth;
+                offCanvas.height = window.innerHeight;
+            }
+            
+            // Reset thread system on resize
+            initThreads();
+            
+            // Reset slit history on resize
+            initSlitHistory();
+            
+            // Reset Conway grid on resize
+            initConwayGrid();
+        }
+        
+        // Initialize slit scan history buffer
+        function initSlitHistory() {
+            slitHistory = [];
+            for (let i = 0; i < historyLength; i++) {
+                slitHistory.push(new ImageData(1, mainCanvas.height));
+            }
+        }
+        
+        // Initialize threads
+        function initThreads() {
+            threads = [];
+            threadSpacing = mainCanvas.width / threadCount;
+            
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: i * threadSpacing,
+                    energy: 0,
+                    // More varied tension for more natural ocean movement
+                    tension: 0.7 + Math.random() * 0.6,
+                    // Slower decay for deeper ocean feel
+                    decay: 0.97 + (Math.random() * 0.02),
+                    // More varied resonance for complex ocean waves
+                    resonance: 0.5 + Math.random() * 0.5,
+                    offset: Math.random() * Math.PI * 2,
+                    width: threadWidth * (0.8 + Math.random() * 0.4),
+                    glowing: false
+                });
+            }
+        }
+        
+        // Initialize Conway Game of Life grid
+        function initConwayGrid() {
+            conwayGrid = [];
+            nextConwayGrid = [];
+            
+            for (let y = 0; y < conwayGridSize; y++) {
+                conwayGrid[y] = [];
+                nextConwayGrid[y] = [];
+                for (let x = 0; x < conwayGridSize; x++) {
+                    conwayGrid[y][x] = {
+                        alive: false,
+                        energy: 0,
+                        age: 0
+                    };
+                    nextConwayGrid[y][x] = {
+                        alive: false,
+                        energy: 0,
+                        age: 0
+                    };
+                }
+            }
+        }
+        
+        // Update Conway Game of Life grid with wave-like rules
+        function updateConwayGrid() {
+            if (!conwayActive) return;
+            
+            conwayFrameCount++;
+            if (conwayFrameCount % conwayUpdateRate !== 0) return;
+            
+            // Custom Conway-like rules for wave-like behavior
+            const birthRange = [3, 4]; // Cells born with these many neighbors
+            const surviveRange = [2, 3, 4]; // Cells survive with these many neighbors
+            
+            // Apply Conway's Game of Life rules with wave modifications
+            for (let y = 0; y < conwayGridSize; y++) {
+                for (let x = 0; x < conwayGridSize; x++) {
+                    const neighbors = countNeighbors(x, y);
+                    const cell = conwayGrid[y][x];
+                    
+                    // Custom wave rules
+                    if (cell.alive) {
+                        // Cell is alive
+                        nextConwayGrid[y][x].alive = surviveRange.includes(neighbors);
+                        nextConwayGrid[y][x].energy = cell.energy * 0.97;
+                        nextConwayGrid[y][x].age = cell.age + 1;
+                        
+                        // Add some wave-like perturbation
+                        if (Math.random() < 0.002) {
+                            nextConwayGrid[y][x].energy += 0.3;
+                        }
+                    } else {
+                        // Cell is dead
+                        nextConwayGrid[y][x].alive = birthRange.includes(neighbors);
+                        nextConwayGrid[y][x].energy = nextConwayGrid[y][x].alive ? 0.8 : cell.energy * 0.9;
+                        nextConwayGrid[y][x].age = nextConwayGrid[y][x].alive ? 1 : 0;
+                    }
+                    
+                    // Wave influence
+                    const distFromCenter = Math.sqrt(Math.pow((x - conwayGridSize/2) / conwayGridSize, 2) + 
+                                                    Math.pow((y - conwayGridSize/2) / conwayGridSize, 2));
+                    const waveFactor = Math.sin(distFromCenter * 15 + waveTime) * 0.5 + 0.5;
+                    
+                    if (Math.random() < 0.0008 * waveFactor) {
+                        nextConwayGrid[y][x].alive = !nextConwayGrid[y][x].alive;
+                        nextConwayGrid[y][x].energy += 0.4;
+                    }
+                }
+            }
+            
+            // Swap grids
+            [conwayGrid, nextConwayGrid] = [nextConwayGrid, conwayGrid];
+            
+            // Check if any cells are still alive or have energy
+            let stillActive = false;
+            for (let y = 0; y < conwayGridSize; y++) {
+                for (let x = 0; x < conwayGridSize; x++) {
+                    if (conwayGrid[y][x].alive || conwayGrid[y][x].energy > 0.1) {
+                        stillActive = true;
+                        break;
+                    }
+                }
+                if (stillActive) break;
+            }
+            
+            conwayActive = stillActive;
+        }
+        
+        // Count neighbors for Conway's Game of Life with energy weighting
+        function countNeighbors(x, y) {
+            let count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    
+                    const nx = (x + dx + conwayGridSize) % conwayGridSize;
+                    const ny = (y + dy + conwayGridSize) % conwayGridSize;
+                    
+                    if (conwayGrid[ny][nx].alive) {
+                        count += 1;
+                    } else if (conwayGrid[ny][nx].energy > 0.5) {
+                        // Count high-energy cells as partial neighbors
+                        count += 0.5;
+                    }
+                }
+            }
+            return Math.round(count);
+        }
+        
+        // Add a disturbance (wave) to threads
+        function addDisturbance(x, y, radius, intensity) {
+            // Find the closest thread to the disturbance
+            let closestThread = null;
+            let closestDistance = Infinity;
+            
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestThread = thread;
+                }
+            }
+            
+            // Apply energy to threads within radius
+            let triggeredThreads = 0;
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+                
+                if (distance < radius) {
+                    // Calculate impact based on distance
+                    const impact = intensity * (1 - distance / radius);
+                    
+                    // Add energy to thread
+                    thread.energy = Math.min(1, thread.energy + impact);
+                    
+                    // Trigger Conway effect if energy is high enough
+                    if (thread.energy > conwayThreshold) {
+                        activateConwayAtPosition(thread.x, y);
+                    }
+                    
+                    // Trigger sound - the audio is now handled automatically in updateAudio()
+                    // but we can boost the specific thread's energy for more immediate sound response
+                    if (audioInitialized && triggeredThreads < 3) {
+                        if (impact > 0.15) {
+                            // Boost the thread's energy temporarily for more immediate sound response
+                            if (i < threadGains.length) {
+                                const gainNode = threadGains[i];
+                                const targetGain = impact * 0.2; // Higher gain for direct interactions
+                                gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+                                gainNode.gain.linearRampToValueAtTime(targetGain, audioCtx.currentTime + 0.05);
+                                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.0);
+                            }
+                            triggeredThreads++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Activate Conway Game of Life pattern with wave crest pattern
+        function activateConwayAtPosition(x, y) {
+            // Initialize Conway grid if not active
+            if (!conwayActive) {
+                initConwayGrid();
+            }
+            
+            // Map canvas coordinates to Conway grid
+            const gridX = Math.floor((x / mainCanvas.width) * conwayGridSize);
+            const gridY = Math.floor((y / mainCanvas.height) * conwayGridSize);
+            
+            // Create wave crest pattern based on affected threads
+            for (let dy = -10; dy <= 10; dy++) {
+                const ny = (gridY + dy + conwayGridSize) % conwayGridSize;
+                
+                // Add randomness to the pattern
+                const randomOffset = Math.floor(Math.random() * 3) - 1;
+                const nx = (gridX + randomOffset + conwayGridSize) % conwayGridSize;
+                
+                // Set cell state based on impact and position
+                const distFromCenter = Math.abs(dy) / 10;
+                const aliveChance = 0.8 * (1 - distFromCenter);
+                
+                if (Math.random() < aliveChance) {
+                    conwayGrid[ny][nx].alive = true;
+                    conwayGrid[ny][nx].energy = 1.0;
+                    conwayGrid[ny][nx].age = 1;
+                }
+            }
+            
+            conwayActive = true;
+        }
+        
+        // Update thread animation state - more flowing, meditative wave-like movement
+        function updateThreads() {
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Apply more gradual decay for longer-lasting ocean waves
+                thread.energy *= thread.decay;
+                
+                // Add minimal random movement factor for meditative quality
+                if (Math.random() < 0.03) {
+                    thread.energy += Math.random() * randomMovementFactor * 0.05;
+                }
+                
+                // Apply gentle energy transfer between threads for a flowing ocean wave effect
+                if (i > 0 && i < threads.length - 1) {
+                    const leftThread = threads[i-1];
+                    const rightThread = threads[i+1];
+                    
+                    // Transfer a smaller amount of energy to neighboring threads for gentler wave propagation
+                    const transferAmount = thread.energy * 0.007 * thread.resonance;
+                    
+                    if (thread.energy > 0.05) {
+                        // Add minimal randomness to energy transfer
+                        leftThread.energy += transferAmount * (0.9 + Math.random() * 0.2);
+                        rightThread.energy += transferAmount * (0.9 + Math.random() * 0.2);
+                    }
+                }
+                
+                // Reset glowing state
+                thread.glowing = false;
+            }
+        }
+        
+        // Update slit scan history - more fluid for meditative ocean effect
+        function updateSlitScan() {
+            // Advance slit position more slowly for fluid ocean movement
+            slitPosition = (slitPosition + 0.2) % mainCanvas.width;
+            
+            // Get image data for current slit
+            const slitX = Math.floor(slitPosition);
+            const slitData = mainCtx.getImageData(slitX, 0, 1, mainCanvas.height);
+            
+            // Add to history
+            slitHistory.push(slitData);
+            
+            // Remove oldest entry if we've reached max length
+            if (slitHistory.length > historyLength) {
+                slitHistory.shift();
+            }
+            
+            // Clear echo canvas with subtle transparency to create flowing water trails with erosion
+            echoCtx.fillStyle = `rgba(0, 8, 25, ${erosionRate})`;
+            echoCtx.fillRect(0, 0, echoCanvas.width, echoCanvas.height);
+            
+            // Draw slit history with fading effect and blending
+            for (let i = 0; i < slitHistory.length; i++) {
+                // Add minimal randomness to the position for more natural erosion
+                const randomOffset = Math.random() * 1 - 0.5;
+                const x = (slitX - i + randomOffset + mainCanvas.width) % mainCanvas.width;
+                
+                // Gentler falloff for more meditative ocean-like fading
+                const opacity = Math.pow(1 - (i / historyLength), 1.1) * 0.8;
+                
+                // Draw the slit with varying opacity
+                echoCtx.globalAlpha = opacity;
+                echoCtx.putImageData(slitHistory[i], x, 0);
+                
+                // Occasionally add a blend effect
+                if (i % 8 === 0 && i > 0) {
+                    const blendX = (x + 3 * Math.sin(i * 0.08)) % mainCanvas.width;
+                    echoCtx.globalAlpha = opacity * blendFactor;
+                    echoCtx.putImageData(slitHistory[i], blendX, 0);
+                }
+            }
+            
+            // Reset global alpha
+            echoCtx.globalAlpha = 1.0;
+            
+            // Apply a subtle blur for more blending - less frequent for better performance
+            if (Math.random() < 0.05) {
+                echoCtx.filter = 'blur(1px)';
+                echoCtx.drawImage(echoCanvas, 0, 0);
+                echoCtx.filter = 'none';
+            }
+        }
+        
+        // Draw the main scene
+        function drawScene() {
+            // Clear the canvas with a deep ocean gradient background - more meditative colors
+            const gradient = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
+            gradient.addColorStop(0, 'rgba(0, 12, 30, 1)');
+            gradient.addColorStop(0.6, 'rgba(0, 8, 22, 1)');
+            gradient.addColorStop(1, 'rgba(0, 2, 15, 1)');
+            mainCtx.fillStyle = gradient;
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+            
+            // Draw Conway Game of Life cells if active
+            if (conwayActive) {
+                const cellWidth = mainCanvas.width / conwayGridSize;
+                const cellHeight = mainCanvas.height / conwayGridSize;
+                
+                for (let y = 0; y < conwayGridSize; y++) {
+                    for (let x = 0; x < conwayGridSize; x++) {
+                        const cell = conwayGrid[y][x];
+                        if (cell.alive || cell.energy > 0.1) {
+                            // Calculate color based on energy and age
+                            const energy = Math.min(cell.energy, 1);
+                            const age = Math.min(cell.age / 50, 1);
+                            
+                            // Blue-tinted colors for ocean theme
+                            const r = 100 + energy * 55;
+                            const g = 150 + energy * 50;
+                            const b = 220 + energy * 35;
+                            const a = (cell.alive ? 0.3 : 0.15) * energy;
+                            
+                            mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+                            
+                            // Draw with slight randomness for more natural look
+                            const jitterX = x * cellWidth + (Math.random() * 0.5 - 0.25) * cellWidth;
+                            const jitterY = y * cellHeight + (Math.random() * 0.5 - 0.25) * cellHeight;
+                            const jitterWidth = cellWidth * (0.9 + Math.random() * 0.2);
+                            const jitterHeight = cellHeight * (0.9 + Math.random() * 0.2);
+                            
+                            mainCtx.beginPath();
+                            mainCtx.rect(jitterX, jitterY, jitterWidth, jitterHeight);
+                            mainCtx.fill();
+                        }
+                    }
+                }
+                
+                // Apply a soft blur effect for the Conway cells
+                mainCtx.filter = 'blur(2px)';
+                mainCtx.globalCompositeOperation = 'screen';
+                mainCtx.drawImage(mainCanvas, 0, 0);
+                mainCtx.filter = 'none';
+                mainCtx.globalCompositeOperation = 'source-over';
+            }
+            
+            // Draw each thread
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const x = thread.x;
+                
+                // Calculate color based on energy - deeper, more meditative blue ocean colors
+                const hue = 210 + thread.energy * 20; // Deep blue range
+                const lightness = 30 + thread.energy * 35;
+                const saturation = 65 + thread.energy * 20;
+                mainCtx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                mainCtx.lineWidth = thread.width;
+                
+                // Draw thread path
+                mainCtx.beginPath();
+                
+                // Use finer steps for all threads for a smoother appearance
+                const yStep = 2;
+                
+                // Draw thread line with wave distortion and randomness
+                for (let y = 0; y < mainCanvas.height; y += yStep) {
+                    // Calculate displacement based on multiple wave functions for more organic ocean movement
+                    // Use gentler sine waves for more meditative motion
+                    const waveFactor1 = Math.sin(y * waveFrequency + waveTime + thread.offset) * thread.energy * 25;
+                    const waveFactor2 = Math.sin(y * waveFrequency * 0.15 + waveTime * 0.3 + thread.offset * 1.2) * thread.energy * 20;
+                    const waveFactor3 = Math.sin(y * waveFrequency * 0.08 + waveTime * 0.15 + thread.offset * 0.4) * thread.energy * 10;
+                    
+                    // Add minimal randomness to the displacement for more meditative flow
+                    const randomFactor = (Math.random() * 2 - 1) * thread.energy * randomMovementFactor * 2;
+                    
+                    const displacement = (waveFactor1 + waveFactor2 + waveFactor3 + randomFactor) * thread.tension;
+                    
+                    if (y === 0) {
+                        mainCtx.moveTo(x + displacement, y);
+                    } else {
+                        // Use simple lineTo for all points to avoid path errors
+                        mainCtx.lineTo(x + displacement, y);
+                    }
+                }
+                
+                mainCtx.stroke();
+                
+                // Add subtle glow effect for active threads - blue ocean glow
+                if (thread.energy > 0.05) {
+                    // Add soft highlights
+                    mainCtx.globalCompositeOperation = "screen";
+                    mainCtx.lineWidth = thread.width * 0.6;
+                    mainCtx.strokeStyle = `rgba(100, 170, 255, ${thread.energy * 0.4})`;
+                    mainCtx.stroke();
+                    
+                    // Add a second, wider glow for more depth
+                    if (thread.energy > 0.2) {
+                        mainCtx.lineWidth = thread.width * 1.5;
+                        mainCtx.strokeStyle = `rgba(50, 120, 220, ${thread.energy * 0.15})`;
+                        mainCtx.stroke();
+                    }
+                    
+                    // Add a third, very wide glow for deep ocean bioluminescence
+                    if (thread.energy > 0.5) {
+                        mainCtx.lineWidth = thread.width * 3;
+                        mainCtx.strokeStyle = `rgba(30, 80, 180, ${thread.energy * 0.08})`;
+                        mainCtx.stroke();
+                    }
+                    
+                    // Reset blend mode
+                    mainCtx.globalCompositeOperation = "source-over";
+                }
+            }
+        }
+        
+        // Main animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update wave time
+            waveTime += waveSpeed;
+            
+            // Update threads
+            updateThreads();
+            
+            // Update audio
+            updateAudio();
+            
+            // Update Conway Game of Life if active
+            if (conwayActive) {
+                updateConwayGrid();
+            }
+            
+            // Update slit scan effect
+            updateSlitScan();
+            
+            // Process camera input
+            processCameraFeed();
+            
+            // Draw the scene
+            drawScene();
+        }
+        
+        // Initialize and start
+        function init() {
+            // Initialize systems
+            initThreads();
+            initSlitHistory();
+            initConwayGrid();
+            
+            // Initialize audio on user interaction to comply with browser policies
+            document.addEventListener('click', function initAudioOnFirstClick() {
+                if (!audioInitialized) {
+                    initAudio();
+                    document.removeEventListener('click', initAudioOnFirstClick);
+                }
+            }, { once: false });
+            
+            // Also try to initialize on touchstart for mobile
+            document.addEventListener('touchstart', function initAudioOnFirstTouch() {
+                if (!audioInitialized) {
+                    initAudio();
+                    document.removeEventListener('touchstart', initAudioOnFirstTouch);
+                }
+            }, { once: false });
+            
+            // Add philosophical quotes that appear occasionally
+            setInterval(() => {
+                const quotes = [
+                    "A non-extractive computational meditation",
+                    "Reclaiming digital sovereignty through flow",
+                    "Beyond Turing models: computational meditation",
+                    "Erasing corporate origins through meditative flow",
+                    "Ontological rebellion through computational art"
+                ];
+                
+                const philosophyElement = document.querySelector('.philosophy');
+                if (philosophyElement) {
+                    philosophyElement.textContent = quotes[Math.floor(Math.random() * quotes.length)];
+                    philosophyElement.style.opacity = 0;
+                    setTimeout(() => {
+                        philosophyElement.style.opacity = 0.6;
+                        philosophyElement.style.transition = "opacity 3s ease-in-out";
+                    }, 100);
+                }
+            }, 20000); // Change quote every 20 seconds
+            
+            // Touch and mouse interaction
+            mainCanvas.addEventListener('mousemove', function(e) {
+                if (!cameraEnabled && e.buttons === 1) {
+                    addDisturbance(e.clientX, e.clientY, 30, 0.8);
+                }
+            });
+            
+            mainCanvas.addEventListener('mousedown', function(e) {
+                if (!cameraEnabled) {
+                    addDisturbance(e.clientX, e.clientY, 40, 1.0);
+                }
+            });
+            
+            mainCanvas.addEventListener('touchmove', function(e) {
+                if (!cameraEnabled) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addDisturbance(touch.clientX, touch.clientY, 30, 0.8);
+                }
+            });
+            
+            mainCanvas.addEventListener('touchstart', function(e) {
+                if (!cameraEnabled) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addDisturbance(touch.clientX, touch.clientY, 40, 1.0);
+                }
+            });
+            
+            // Button controls
+            document.getElementById('reset-btn').addEventListener('click', function() {
+                // Reset all thread energies
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].energy = 0;
+                }
+                
+                // Clear slit history
+                initSlitHistory();
+            });
+            
+            document.getElementById('sound-btn').addEventListener('click', function() {
+                if (!audioInitialized) {
+                    initAudio();
+                    this.textContent = "Disable Sound";
+                    this.classList.add('active');
+                } else {
+                    // Toggle master gain to mute/unmute
+                    if (masterGain.gain.value > 0) {
+                        masterGain.gain.value = 0;
+                        this.textContent = "Enable Sound";
+                        this.classList.remove('active');
+                    } else {
+                        masterGain.gain.value = 0.3;
+                        this.textContent = "Disable Sound";
+                        this.classList.add('active');
+                    }
+                }
+            });
+            
+            document.getElementById('camera-btn').addEventListener('click', function() {
+                if (!cameraEnabled) {
+                    initCamera();
+                } else {
+                    disableCamera();
+                }
+            });
+            
+            // Slider controls
+            document.getElementById('speed-slider').addEventListener('input', function(e) {
+                waveSpeed = 0.002 + (parseInt(e.target.value) / 100) * 0.001;
+            });
+            
+            document.getElementById('decay-slider').addEventListener('input', function(e) {
+                const decayValue = parseInt(e.target.value) / 100;
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].decay = 0.9 + decayValue * 0.09; // Range from 0.9 to 0.99
+                }
+            });
+            
+            document.getElementById('resonance-slider').addEventListener('input', function(e) {
+                // Update resonance value
+                const resonanceValue = parseInt(e.target.value) / 100;
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].resonance = 0.2 + resonanceValue * 0.3;
+                }
+            });
+            
+            // Start animation loop
+            requestAnimationFrame(animate);
+        }
+        
+        // Start when everything is loaded
+        window.addEventListener('load', function() {
+            init();
+        });
+        
+        // UI toggle behavior
+        document.querySelector('.toggle-ui').addEventListener('click', function() {
+            document.getElementById('controls').classList.toggle('hidden');
+            document.getElementById('info').classList.toggle('hidden');
+        });
+        
+        // Fullscreen button
+        document.getElementById('fullscreen-btn').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+        
+        // Initialize camera
+        function initCamera() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" },
+                    audio: false
+                })
+                .then((stream) => {
+                    video.srcObject = stream;
+                    video.play();
+                    cameraEnabled = true;
+                    
+                    // Clear previous image data
+                    prevImageData = null;
+                    
+                    // Update button state
+                    document.getElementById('camera-btn').textContent = "Disable Camera";
+                    document.getElementById('camera-btn').classList.add('active');
+                    
+                    // Update instructions
+                    document.querySelector('#info p:nth-child(2)').textContent = 
+                        "Move in front of the camera to create ocean waves";
+                })
+                .catch((err) => {
+                    console.error("Error accessing camera: ", err);
+                });
+            } else {
+                console.error("getUserMedia is not supported in your browser");
+            }
+        }
+        
+        // Disable camera
+        function disableCamera() {
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            cameraEnabled = false;
+            
+            // Update button state
+            document.getElementById('camera-btn').textContent = "Camera Mode";
+            document.getElementById('camera-btn').classList.remove('active');
+            
+            // Update instructions
+            document.querySelector('#info p:nth-child(2)').textContent = 
+                "A reactive ocean textile that responds to your movement";
+        }
+        
+        // Process camera feed for motion detection
+        function processCameraFeed() {
+            if (!cameraEnabled || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            
+            // Limit processing frequency for performance
+            if (Date.now() - lastProcessedCameraTime < cameraProcessInterval) return;
+            lastProcessedCameraTime = Date.now();
+            
+            // Draw current video frame to offscreen canvas
+            offCtx.drawImage(video, 0, 0, offCanvas.width, offCanvas.height);
+            const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+            
+            // If we have a previous frame, compute differences
+            if (prevImageData) {
+                // Set up a grid over the canvas
+                const cellSize = 30; // Larger cells for better performance
+                const gridWidth = Math.ceil(mainCanvas.width / cellSize);
+                const gridHeight = Math.ceil(mainCanvas.height / cellSize);
+                
+                // Process every Nth pixel for performance
+                const pixelStep = 5;
+                
+                // Loop through grid cells
+                for (let cy = 0; cy < gridHeight; cy++) {
+                    for (let cx = 0; cx < gridWidth; cx++) {
+                        let sumDiff = 0;
+                        let count = 0;
+                        
+                        // Sample pixels within this cell
+                        for (let y = cy * cellSize; y < (cy + 1) * cellSize; y += pixelStep) {
+                            for (let x = cx * cellSize; x < (cx + 1) * cellSize; x += pixelStep) {
+                                if (x < mainCanvas.width && y < mainCanvas.height) {
+                                    const index = (y * mainCanvas.width + x) * 4;
+                                    
+                                    // Calculate color difference between frames
+                                    const rDiff = Math.abs(imageData.data[index] - prevImageData.data[index]);
+                                    const gDiff = Math.abs(imageData.data[index + 1] - prevImageData.data[index + 1]);
+                                    const bDiff = Math.abs(imageData.data[index + 2] - prevImageData.data[index + 2]);
+                                    
+                                    // Average color difference
+                                    const diff = (rDiff + gDiff + bDiff) / 3;
+                                    sumDiff += diff;
+                                    count++;
+                                }
+                            }
+                        }
+                        
+                        // Calculate average difference for this cell
+                        if (count > 0) {
+                            const avgDiff = sumDiff / count;
+                            
+                            // If motion exceeds threshold, create a disturbance
+                            if (avgDiff > motionThreshold) {
+                                const centerX = cx * cellSize + cellSize / 2;
+                                const centerY = cy * cellSize + cellSize / 2;
+                                const strength = Math.min(1.0, avgDiff / 100);
+                                
+                                // Create a disturbance proportional to motion intensity
+                                addDisturbance(centerX, centerY, 40, strength);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Save current frame for next comparison
+            prevImageData = imageData;
+        }
+    </script>
+</body>
+</html>

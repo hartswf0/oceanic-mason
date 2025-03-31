@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom — Meditative Wave Textile</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #00050A; /* Darker, slightly blue base */
+            font-family: 'Courier New', monospace;
+            color: rgba(120, 190, 240, 0.7); /* Softer blue text */
+            touch-action: none;
+            width: 100%;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #main-canvas {
+            z-index: 1;
+        }
+
+        #echo-canvas {
+            z-index: 2;
+            opacity: 0.6; /* Slightly more subtle echo */
+            mix-blend-mode: screen; /* Blend echo more softly */
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 5, 15, 0.7); /* Darker controls */
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 180, 255, 0.2); /* Subtler border */
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            transition: transform 0.3s ease-out; /* Smoother transition */
+        }
+
+        .controls.hidden {
+            transform: translateY(120%); /* Hide more smoothly */
+        }
+
+        button {
+            background: rgba(15, 30, 60, 0.7); /* Slightly darker buttons */
+            color: rgba(140, 190, 235, 0.9);
+            border: 1px solid rgba(100, 180, 255, 0.4);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        button:hover {
+            background: rgba(30, 60, 100, 0.8);
+        }
+
+        button.active {
+            background: rgba(50, 100, 140, 0.9);
+            box-shadow: 0 0 8px rgba(100, 180, 255, 0.3);
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 5px;
+        }
+
+        .slider-container span {
+            font-size: 11px; /* Smaller text */
+            margin-bottom: 4px;
+            color: rgba(120, 190, 240, 0.6);
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 90px; /* Slightly smaller */
+            height: 2px; /* Thinner */
+            background: rgba(100, 180, 255, 0.2);
+            border-radius: 1px;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; /* Smaller thumb */
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(120, 180, 255, 0.7);
+            cursor: pointer;
+        }
+
+        #info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 5, 15, 0.7); /* Darker info */
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 280px; /* Slightly narrower */
+            text-align: right;
+            border: 1px solid rgba(100, 180, 255, 0.2); /* Subtler border */
+            transition: opacity 0.3s ease-out;
+        }
+
+        #info h3 {
+             margin-bottom: 5px;
+             color: rgba(140, 190, 235, 0.9);
+        }
+        #info p {
+            font-size: 13px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            color: rgba(120, 190, 240, 0.7);
+        }
+
+
+        #info.hidden {
+            opacity: 0;
+            pointer-events: none; /* Prevent interaction when hidden */
+        }
+
+        .toggle-ui {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 101;
+            width: 35px; /* Smaller toggle */
+            height: 35px;
+            background: rgba(10, 20, 40, 0.7);
+            border: 1px solid rgba(100, 180, 255, 0.4);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            color: rgba(140, 190, 235, 0.9);
+            font-size: 18px; /* Smaller icon */
+             transition: background-color 0.2s;
+        }
+         .toggle-ui:hover {
+            background: rgba(30, 60, 100, 0.8);
+         }
+
+        /* Hidden video element for camera feed */
+        video {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="echo-canvas"></canvas>
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+
+    <div id="controls" class="hidden"> {/* Start hidden */}
+        <button id="reset-btn">Reset</button>
+        <button id="sound-btn">Enable Sound</button>
+        <button id="camera-btn">Camera Mode</button>
+        <button id="fullscreen-btn">Fullscreen</button>
+
+        <div class="slider-container">
+            <span>Wave Speed</span>
+            {/* Default lower speed */}
+            <input type="range" min="0" max="100" value="30" class="slider" id="speed-slider">
+        </div>
+
+        <div class="slider-container">
+            <span>Persistence</span> {/* Renamed from Ocean Depth */}
+            {/* Default higher persistence (slower decay) */}
+            <input type="range" min="0" max="100" value="85" class="slider" id="decay-slider">
+        </div>
+
+        <div class="slider-container">
+            <span>Wave Intensity</span>
+             {/* Default lower intensity */}
+            <input type="range" min="0" max="100" value="40" class="slider" id="resonance-slider">
+        </div>
+    </div>
+
+    <div id="info" class="hidden"> {/* Start hidden */}
+        <h3>Ocean Loom</h3>
+        <p>A meditative textile woven by gentle waves.</p>
+        <p>Touch softly or move slowly to interact.</p> {/* Updated instruction */}
+    </div>
+
+    <div class="toggle-ui">...</div> {/* Changed icon */}
+
+    <script>
+        // Canvas and context setup
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+
+        const echoCanvas = document.getElementById('echo-canvas');
+        const echoCtx = echoCanvas.getContext('2d');
+
+        // Global state
+        let soundEnabled = false;
+        let isAudioInitialized = false;
+        let cameraEnabled = false;
+        let isPaused = false; // Not currently used, but could be for pausing
+        let lastTime = 0;
+        let animationFrameId = null; // To manage animation frame requests
+
+        // Thread system variables
+        const threadCount = 100; // Slightly fewer threads for performance/calmness
+        let threads = [];
+        let threadWidth = 1.2; // Thinner threads
+        let threadSpacing;
+
+        // Wave and animation parameters (tuned for meditative feel)
+        let waveTime = 0;
+        let waveSpeed = 0.008; // Slower base speed
+        let waveFrequency = 0.012; // Lower frequency for broader waves
+        let baseDecay = 0.985; // Slower base decay (higher persistence)
+        let baseResonance = 0.15; // Lower base resonance (less energy spread)
+
+        // Slit scan history
+        const historyLength = 120; // Longer history for smoother trails
+        let slitHistory = [];
+        let slitPosition = 0;
+        let slitSpeed = 0.6; // Slower slit scan speed
+
+        // Camera and motion detection variables
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true }); // Optimize for frequent reads
+        let motionThreshold = 35; // Higher threshold for less sensitivity
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 100; // Process less frequently (ms)
+
+        // Audio variables
+        let audioContext = null;
+        let masterGain = null;
+        let reverb = null;
+        let oscillators = [];
+        let gainNodes = [];
+
+        // Note frequencies (Softer, more consonant scale)
+        const noteFrequencies = {
+             // Using a pentatonic minor scale - often perceived as calming
+            all: [
+                130.81, // C3
+                155.56, // Eb3
+                174.61, // F3
+                196.00, // G3
+                233.08, // Bb3
+                261.63, // C4
+                311.13, // Eb4
+                349.23, // F4
+            ]
+        };
+
+        // UI Elements
+        const controlsPanel = document.getElementById('controls');
+        const infoPanel = document.getElementById('info');
+        const uiToggleButton = document.querySelector('.toggle-ui');
+
+        // --- Initialization ---
+
+        function resizeCanvases() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            mainCanvas.width = width;
+            mainCanvas.height = height;
+            echoCanvas.width = width;
+            echoCanvas.height = height;
+
+            // Resize offscreen canvas if it exists
+            offCanvas.width = width;
+            offCanvas.height = height;
+
+            initThreads(); // Reinitialize threads based on new width
+            initSlitHistory(); // Reset history buffer
+
+             // Redraw immediately after resize
+             if (!isPaused) {
+                drawScene();
+                updateSlitScanVisuals(); // Draw current echo state
+             }
+        }
+
+        function initThreads() {
+            threads = [];
+            threadSpacing = mainCanvas.width / (threadCount + 1);
+            const baseHue = 200; // Base blue/cyan hue
+
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    width: threadWidth,
+                    energy: 0,
+                    offset: Math.random() * Math.PI * 2,
+                    // Parameters influenced by sliders + base values
+                    tension: 0.8 + Math.random() * 0.4, // Base tension
+                    decay: baseDecay + (Math.random() - 0.5) * 0.01, // Individual variation
+                    resonance: baseResonance + (Math.random() - 0.5) * 0.05, // Individual variation
+                    hueShift: (Math.random() - 0.5) * 15 // Slight static hue variation
+                });
+            }
+             updateParametersFromSliders(); // Apply initial slider values
+        }
+
+        function initSlitHistory() {
+            slitHistory = [];
+             const initialImageData = echoCtx.createImageData(1, mainCanvas.height); // Use create for empty data
+            for (let i = 0; i < historyLength; i++) {
+                slitHistory.push(initialImageData);
+            }
+            slitPosition = mainCanvas.width / 2; // Start slit in the middle
+        }
+
+         // Initialize audio system (needs user interaction)
+        async function initAudio() {
+            if (isAudioInitialized || !audioContext) {
+                 // If context exists but isn't running (suspended), resume it.
+                 if (audioContext && audioContext.state === 'suspended') {
+                    try {
+                        await audioContext.resume();
+                        console.log("AudioContext resumed.");
+                        soundEnabled = true;
+                        document.getElementById('sound-btn').textContent = "Sound On";
+                        document.getElementById('sound-btn').classList.add('active');
+                        masterGain.gain.setValueAtTime(0.15, audioContext.currentTime); // Restore gain softly
+                        return true; // Indicate success
+                    } catch (err) {
+                        console.error("Error resuming AudioContext:", err);
+                        return false; // Indicate failure
+                    }
+                } else if (isAudioInitialized) {
+                     // Already initialized and running
+                     soundEnabled = true; // Ensure state is correct
+                     document.getElementById('sound-btn').textContent = "Sound On";
+                     document.getElementById('sound-btn').classList.add('active');
+                     masterGain.gain.setValueAtTime(0.15, audioContext.currentTime); // Ensure gain is on
+                     return true;
+                }
+                // If no context yet, try creating it.
+                 try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                 } catch (error) {
+                    console.error("Error creating AudioContext:", error);
+                    alert("Web Audio API is not supported in your browser.");
+                    return false;
+                 }
+            }
+
+            // Proceed with setup only if context is newly created or resumed successfully
+            if (!audioContext || audioContext.state !== 'running') {
+                 console.log("AudioContext not running, cannot initialize further.");
+                 return false;
+            }
+
+            try {
+                // Create master gain (start quiet)
+                masterGain = audioContext.createGain();
+                masterGain.gain.setValueAtTime(0, audioContext.currentTime); // Start muted
+                masterGain.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.5); // Fade in gently
+                masterGain.connect(audioContext.destination);
+
+                // Create reverb (subtle)
+                reverb = audioContext.createConvolver();
+                const impulseLength = audioContext.sampleRate * 2.5; // Shorter, softer reverb
+                const impulse = audioContext.createBuffer(2, impulseLength, audioContext.sampleRate);
+                for (let channel = 0; channel < 2; channel++) {
+                    const impulseData = impulse.getChannelData(channel);
+                    for (let i = 0; i < impulseLength; i++) {
+                        impulseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 2.5); // Smoother decay
+                    }
+                }
+                reverb.buffer = impulse;
+                reverb.connect(masterGain);
+
+                // Create oscillators (fewer, sine waves for gentleness)
+                oscillators = [];
+                gainNodes = [];
+                const numOscillators = 6; // Fewer oscillators
+                for (let i = 0; i < numOscillators; i++) {
+                    const osc = audioContext.createOscillator();
+                    osc.type = 'sine'; // Gentle sine waves
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = 0; // Start silent
+
+                    // Connect: some direct, some through reverb
+                    osc.connect(gainNode);
+                    if (i % 2 === 0) {
+                        gainNode.connect(reverb);
+                    } else {
+                        gainNode.connect(masterGain); // Connect some directly for clarity
+                    }
+                    osc.start();
+                    oscillators.push(osc);
+                    gainNodes.push(gainNode);
+                }
+
+                soundEnabled = true;
+                isAudioInitialized = true;
+                document.getElementById('sound-btn').textContent = "Sound On";
+                document.getElementById('sound-btn').classList.add('active');
+                console.log("Audio initialized successfully.");
+                return true;
+
+            } catch (error) {
+                console.error("Error initializing audio components:", error);
+                // Clean up context if setup failed partially
+                if (audioContext) {
+                     audioContext.close().catch(e => console.error("Error closing failed audio context:", e));
+                     audioContext = null;
+                }
+                soundEnabled = false;
+                isAudioInitialized = false;
+                 document.getElementById('sound-btn').textContent = "Enable Sound";
+                 document.getElementById('sound-btn').classList.remove('active');
+                return false;
+            }
+        }
+
+        // --- Interaction & Updates ---
+
+        function addDisturbance(x, y, radius, strength) {
+            let triggeredSound = false; // Only trigger sound once per disturbance
+            const adjustedStrength = strength * 0.6; // Reduce overall impact strength
+
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+
+                if (distance < radius) {
+                    const falloff = Math.pow(1 - distance / radius, 2.5); // Smoother falloff
+                    const impact = adjustedStrength * falloff;
+
+                    // Add energy gently, prevent exceeding 1
+                    thread.energy = Math.min(thread.energy + impact, 1.0);
+
+                    // Trigger a very soft sound only once, if enabled and impact is noticeable
+                    if (soundEnabled && isAudioInitialized && !triggeredSound && impact > 0.05) {
+                        triggerSoftSound(i, impact * 0.5); // Pass reduced intensity to sound
+                        triggeredSound = true;
+                    }
+                }
+            }
+        }
+
+         // Trigger a softer, longer sound
+        function triggerSoftSound(threadIndex, intensity) {
+            if (!audioContext || gainNodes.length === 0) return;
+
+            // Pick a random available oscillator/gain node
+            const oscIndex = Math.floor(Math.random() * oscillators.length);
+            const osc = oscillators[oscIndex];
+            const gainNode = gainNodes[oscIndex];
+
+            // Pick a random note from the scale
+            const noteIndex = Math.floor(Math.random() * noteFrequencies.all.length);
+            const frequency = noteFrequencies.all[noteIndex];
+
+            // Set frequency smoothly
+            const now = audioContext.currentTime;
+            osc.frequency.setValueAtTime(osc.frequency.value, now); // Start from current freq
+            osc.frequency.linearRampToValueAtTime(frequency, now + 0.1); // Glide to new freq
+
+            // Apply a long, gentle envelope
+            const attackTime = 0.4; // Slow attack
+            const decayTime = 1.5;  // Slow decay
+            const releaseTime = 3.0; // Long release
+
+            gainNode.gain.cancelScheduledValues(now);
+            gainNode.gain.setValueAtTime(gainNode.gain.value, now); // Start from current gain
+            gainNode.gain.linearRampToValueAtTime(intensity * 0.3, now + attackTime); // Fade in softly
+            gainNode.gain.linearRampToValueAtTime(intensity * 0.1, now + attackTime + decayTime); // Decay
+            gainNode.gain.linearRampToValueAtTime(0.0001, now + attackTime + decayTime + releaseTime); // Fade out long
+        }
+
+
+        function initCamera() {
+             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("Camera access (getUserMedia) is not supported by your browser.");
+                return;
+            }
+             navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user" }, // Prefer front camera for easier interaction
+                audio: false
+            })
+            .then((stream) => {
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { // Wait for metadata to be loaded
+                    video.play().catch(e => console.error("Video play failed:", e));
+                    cameraEnabled = true;
+                    prevImageData = null; // Reset previous frame on new init
+                    document.getElementById('camera-btn').textContent = "Camera Active";
+                    document.getElementById('camera-btn').classList.add('active');
+                    document.querySelector('#info p:last-child').textContent =
+                        "Move gently in view to weave the ocean."; // Update instruction
+                     console.log("Camera initialized.");
+                };
+            })
+            .catch((err) => {
+                console.error("Error accessing camera: ", err);
+                 alert("Could not access the camera. Please ensure permission is granted.");
+                 disableCamera(); // Ensure state is consistent
+            });
+        }
+
+        function disableCamera() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            cameraEnabled = false;
+            prevImageData = null; // Clear previous frame data
+            const cameraBtn = document.getElementById('camera-btn');
+            cameraBtn.textContent = "Camera Mode";
+            cameraBtn.classList.remove('active');
+            document.querySelector('#info p:last-child').textContent =
+                "Touch softly or move slowly to interact."; // Reset instruction
+             console.log("Camera disabled.");
+        }
+
+        function processCameraFeed(currentTime) {
+            if (!cameraEnabled || video.readyState < video.HAVE_METADATA || video.paused || video.ended) return;
+            if (currentTime - lastProcessedCameraTime < cameraProcessInterval) return;
+
+            lastProcessedCameraTime = currentTime;
+
+            try {
+                // Draw current video frame mirrored (more intuitive for user cam)
+                offCtx.save();
+                offCtx.scale(-1, 1); // Flip horizontally
+                offCtx.drawImage(video, -offCanvas.width, 0, offCanvas.width, offCanvas.height);
+                offCtx.restore();
+
+                const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+
+                if (prevImageData) {
+                    const data = imageData.data;
+                    const prevData = prevImageData.data;
+                    const width = imageData.width;
+                    const height = imageData.height;
+                    const step = 4; // Process every 4th pixel (faster)
+
+                    for (let y = 0; y < height; y += step) {
+                        for (let x = 0; x < width; x += step) {
+                            const index = (y * width + x) * 4;
+                            const rDiff = Math.abs(data[index] - prevData[index]);
+                            const gDiff = Math.abs(data[index + 1] - prevData[index + 1]);
+                            const bDiff = Math.abs(data[index + 2] - prevData[index + 2]);
+                            const diff = (rDiff + gDiff + bDiff) / 3;
+
+                            if (diff > motionThreshold) {
+                                // Create a smaller, gentler disturbance based on motion
+                                addDisturbance(x, y, 25, diff / 150); // Smaller radius, much less strength
+                            }
+                        }
+                    }
+                }
+                prevImageData = imageData; // Store current frame for next comparison
+
+            } catch (e) {
+                 // This can happen if the canvas is tainted (though less likely with video)
+                 console.error("Error processing camera feed:", e);
+                 // Optionally disable camera mode if errors persist
+                 // disableCamera();
+            }
+        }
+
+        function updateThreads() {
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+
+                // Apply decay
+                thread.energy *= thread.decay;
+                if (thread.energy < 0.001) thread.energy = 0; // Clamp small values
+
+                // Subtle energy transfer for wave propagation
+                if (i > 0 && thread.energy > 0.01) {
+                    threads[i-1].energy = Math.min(1.0, threads[i-1].energy + thread.energy * thread.resonance * 0.1);
+                }
+                if (i < threads.length - 1 && thread.energy > 0.01) {
+                     threads[i+1].energy = Math.min(1.0, threads[i+1].energy + thread.energy * thread.resonance * 0.1);
+                }
+            }
+        }
+
+        function updateSlitScan() {
+            // Only update data if canvas is visible
+            if (mainCanvas.width <= 0 || mainCanvas.height <= 0) return;
+
+             // Advance slit position
+            slitPosition = (slitPosition + slitSpeed) % mainCanvas.width;
+            const slitX = Math.floor(slitPosition);
+
+            // Ensure slitX is within bounds before getting image data
+            if (slitX >= 0 && slitX < mainCanvas.width) {
+                try {
+                    const slitData = mainCtx.getImageData(slitX, 0, 1, mainCanvas.height);
+                    // Add to history (replace oldest)
+                    slitHistory.shift(); // Remove oldest
+                    slitHistory.push(slitData); // Add newest
+                } catch(e) {
+                    // Can happen during resize or if canvas is tainted
+                    console.warn("Could not get slit image data at x=" + slitX + ":", e.message);
+                    // Push empty data to keep history length consistent
+                     slitHistory.shift();
+                     slitHistory.push(echoCtx.createImageData(1, mainCanvas.height));
+                }
+            } else {
+                 // Push empty data if slitX is out of bounds (shouldn't normally happen with %)
+                 slitHistory.shift();
+                 slitHistory.push(echoCtx.createImageData(1, mainCanvas.height));
+            }
+
+            // Update echo canvas visuals in a separate function for clarity
+            updateSlitScanVisuals();
+        }
+
+        function updateSlitScanVisuals() {
+            // Clear echo canvas with very low opacity for long trails
+            echoCtx.fillStyle = 'rgba(0, 2, 8, 0.05)'; // Very slow fade
+            echoCtx.fillRect(0, 0, echoCanvas.width, echoCanvas.height);
+
+            // Draw slit history with soft fading
+            const currentSlitX = Math.floor(slitPosition);
+            for (let i = 0; i < slitHistory.length; i++) {
+                const x = (currentSlitX - i + mainCanvas.width) % mainCanvas.width;
+                // Gentler opacity falloff
+                const opacity = Math.pow(1 - (i / historyLength), 2.2) * 0.6;
+
+                echoCtx.globalAlpha = opacity;
+                try {
+                    // Ensure history item is valid before putting
+                    if (slitHistory[i] && slitHistory[i].width > 0 && slitHistory[i].height > 0) {
+                        echoCtx.putImageData(slitHistory[i], x, 0);
+                    }
+                } catch (e) {
+                    console.warn("Error putting slit image data at x=" + x + ":", e.message);
+                     // Don't draw if data is invalid
+                }
+            }
+            echoCtx.globalAlpha = 1.0; // Reset global alpha
+        }
+
+
+        // --- Drawing ---
+
+        function drawScene() {
+            // Clear main canvas with a dark gradient
+            const gradient = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
+            gradient.addColorStop(0, 'rgba(0, 5, 15, 1)');   // Dark top
+            gradient.addColorStop(1, 'rgba(0, 2, 8, 1)');     // Darker bottom
+            mainCtx.fillStyle = gradient;
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+            // Draw threads
+             mainCtx.globalCompositeOperation = 'source-over'; // Ensure default blend mode
+
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const x = thread.x;
+
+                // Calculate color: Subtle shifts based on energy, incorporate hueShift
+                const baseHue = 200; // Cyan/Blue base
+                const hue = baseHue + thread.hueShift + thread.energy * 15; // Less hue change
+                const saturation = 50 + thread.energy * 25; // More saturation when active
+                const lightness = 25 + thread.energy * 35; // Brighter when active
+                mainCtx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`; // Add alpha for softness
+                mainCtx.lineWidth = thread.width;
+
+                mainCtx.beginPath();
+                const yStep = 5; // Larger steps for performance and smoother look
+                let firstPoint = true;
+
+                for (let y = 0; y <= mainCanvas.height; y += yStep) {
+                    // Simplified wave distortion for gentler look
+                    const waveFactor = Math.sin(y * waveFrequency + waveTime + thread.offset) * thread.energy * 15; // Reduced amplitude
+                    const displacement = waveFactor * thread.tension;
+
+                    if (firstPoint) {
+                        mainCtx.moveTo(x + displacement, y);
+                        firstPoint = false;
+                    } else {
+                        mainCtx.lineTo(x + displacement, y);
+                    }
+                }
+                mainCtx.stroke();
+
+                 // Very subtle glow effect using 'lighter' blend mode
+                if (thread.energy > 0.02) {
+                    mainCtx.globalCompositeOperation = 'lighter'; // Softer than 'screen'
+                    mainCtx.lineWidth = thread.width * 1.8; // Slightly wider glow
+                    // Low opacity blue glow
+                    mainCtx.strokeStyle = `hsla(${hue + 10}, ${saturation + 10}%, ${lightness + 15}%, ${thread.energy * 0.1})`;
+                    mainCtx.stroke();
+                    mainCtx.globalCompositeOperation = 'source-over'; // Reset blend mode
+                }
+            }
+        }
+
+        // --- Animation Loop ---
+
+        function animate(currentTime) {
+             animationFrameId = requestAnimationFrame(animate); // Request next frame first
+
+             // Calculate deltaTime (optional, but good practice)
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            if (!isPaused) {
+                // Update simulation state
+                waveTime += waveSpeed;
+                updateThreads();
+                if (cameraEnabled) {
+                    processCameraFeed(currentTime);
+                }
+
+                // Draw visuals
+                drawScene(); // Draw main threads
+                updateSlitScan(); // Update and draw echo effect
+            }
+        }
+
+        // --- Event Listeners & Setup ---
+
+         function updateParametersFromSliders() {
+            // Read slider values
+            const speedVal = parseInt(document.getElementById('speed-slider').value) / 100;
+            const decayVal = parseInt(document.getElementById('decay-slider').value) / 100; // Persistence
+            const resonanceVal = parseInt(document.getElementById('resonance-slider').value) / 100;
+
+            // Update global parameters (adjust scaling for desired effect)
+             waveSpeed = 0.002 + speedVal * 0.025; // Range 0.002 to 0.027
+             slitSpeed = 0.2 + speedVal * 1.0; // Link slit speed to wave speed
+
+             // Update thread-specific parameters based on sliders
+             baseDecay = 0.97 + decayVal * 0.029; // Range 0.97 (less persistent) to 0.999 (very persistent)
+             baseResonance = 0.05 + resonanceVal * 0.25; // Range 0.05 (less spread) to 0.3 (more spread)
+
+             // Re-apply base values possibly modified by individual variations
+             for (let thread of threads) {
+                 thread.decay = Math.max(0.9, Math.min(0.9995, baseDecay + (Math.random() - 0.5) * 0.01));
+                 thread.resonance = Math.max(0.01, Math.min(0.5, baseResonance + (Math.random() - 0.5) * 0.05));
+             }
+         }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', resizeCanvases);
+
+            // Mouse interaction
+            mainCanvas.addEventListener('pointerdown', (e) => {
+                 if (!cameraEnabled) {
+                     e.preventDefault(); // Prevent text selection, etc.
+                     mainCanvas.setPointerCapture(e.pointerId); // Capture pointer for dragging
+                     addDisturbance(e.clientX, e.clientY, 35, 0.6); // Gentle press
+                 }
+             });
+
+             mainCanvas.addEventListener('pointermove', (e) => {
+                 if (!cameraEnabled && e.buttons === 1 && mainCanvas.hasPointerCapture(e.pointerId)) {
+                      e.preventDefault();
+                     addDisturbance(e.clientX, e.clientY, 25, 0.3); // Very gentle drag
+                 }
+             });
+
+             mainCanvas.addEventListener('pointerup', (e) => {
+                 if (mainCanvas.hasPointerCapture(e.pointerId)) {
+                     mainCanvas.releasePointerCapture(e.pointerId);
+                 }
+             });
+              mainCanvas.addEventListener('pointercancel', (e) => {
+                 if (mainCanvas.hasPointerCapture(e.pointerId)) {
+                     mainCanvas.releasePointerCapture(e.pointerId);
+                 }
+             });
+
+            // Prevent context menu on canvas
+            mainCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+
+            // Button controls
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                threads.forEach(t => t.energy = 0);
+                initSlitHistory(); // Clear echo buffer too
+                // Optionally reset sound state if desired
+            });
+
+            document.getElementById('sound-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('sound-btn');
+                if (!soundEnabled || !isAudioInitialized) {
+                    const success = await initAudio(); // Attempt to initialize/resume
+                    // State updated within initAudio on success/failure
+                    if (!success) {
+                        btn.textContent = "Sound Error";
+                        btn.classList.remove('active');
+                     }
+                } else {
+                    // If currently enabled, disable it (mute)
+                     if (audioContext && masterGain) {
+                         masterGain.gain.cancelScheduledValues(audioContext.currentTime);
+                         masterGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2); // Fade out
+                    }
+                    soundEnabled = false;
+                    btn.textContent = "Enable Sound";
+                    btn.classList.remove('active');
+                }
+            });
+
+            document.getElementById('camera-btn').addEventListener('click', () => {
+                if (!cameraEnabled) {
+                    initCamera();
+                } else {
+                    disableCamera();
+                }
+            });
+
+            document.getElementById('fullscreen-btn').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+             // UI Toggle
+             uiToggleButton.addEventListener('click', () => {
+                 const isHidden = controlsPanel.classList.toggle('hidden');
+                 infoPanel.classList.toggle('hidden', isHidden); // Match state
+                 uiToggleButton.textContent = isHidden ? '...' : ' X '; // Change icon based on state
+             });
+
+            // Slider controls
+            document.getElementById('speed-slider').addEventListener('input', updateParametersFromSliders);
+            document.getElementById('decay-slider').addEventListener('input', updateParametersFromSliders);
+            document.getElementById('resonance-slider').addEventListener('input', updateParametersFromSliders);
+        }
+
+        // --- Main Initialization ---
+        function init() {
+            resizeCanvases(); // Initial sizing and thread setup
+            setupEventListeners();
+
+            // Start hidden
+             controlsPanel.classList.add('hidden');
+             infoPanel.classList.add('hidden');
+             uiToggleButton.textContent = '...'; // Initial icon for hidden state
+
+            // Stop previous animation frame if restarting
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+
+            // Start animation loop
+            lastTime = performance.now(); // Set initial time
+            animate(lastTime);
+             console.log("Ocean Loom initialized.");
+        }
+
+        // Start when the DOM is ready
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>

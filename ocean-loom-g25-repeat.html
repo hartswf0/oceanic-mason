@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom - Conway Depths [Tuned + Logged]</title>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <!-- Tone.js will be loaded dynamically -->
+    <style>
+        /* Combined and adapted styles */
+        :root {
+            --bg-color: #0c080f; /* Slightly darker purple/black */
+            --text-color: rgba(190, 170, 180, 0.75);
+            --control-bg: rgba(30, 22, 35, 0.85);
+            --control-border: rgba(110, 90, 100, 0.4);
+            --button-bg: rgba(70, 55, 75, 0.8);
+            --button-hover-bg: rgba(90, 75, 95, 0.9);
+            --button-active-border: rgba(160, 130, 150, 0.8);
+            --slider-track: rgba(110, 90, 100, 0.4);
+            --slider-thumb: rgba(160, 130, 150, 0.85);
+            --info-opacity: 0.5;
+            --thread-base-l: 12%; /* Base lightness for threads */
+            --thread-active-l-boost: 10%; /* How much lightness increases when active */
+            --overlay-color: rgba(200, 195, 210, 1.0); /* Base color of smoke, alpha applied later */
+        }
+        body { margin:0; padding:0; overflow:hidden; background-color: var(--bg-color); display:flex; justify-content:center; align-items:center; height:100vh; font-family:'Courier New', monospace; color: var(--text-color); }
+        .container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; /* Prevent extra space */ }
+        #main-canvas { z-index: 1; } /* Threads, Border */
+        #wave-canvas { z-index: 2; opacity: 0.85; mix-blend-mode: screen; pointer-events: none; /* Overlay shouldn't block interaction with main */ }
+
+        .controls { position: absolute; bottom: 10px; left: 10px; z-index: 10; background: var(--control-bg); padding: 12px; border-radius: 6px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; transition: transform .3s ease, opacity .3s ease; border: 1px solid var(--control-border); }
+        .controls.hidden { transform: translateY(100%) translateY(10px); opacity: 0; pointer-events: none; } /* Slide down further */
+        .controls button { background: var(--button-bg); color: inherit; border: 1px solid var(--control-border); padding: 6px 10px; margin: 2px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s; }
+        .controls button:hover { background: var(--button-hover-bg); }
+        .voice-button { opacity: .6; }
+        .voice-button.active { opacity: 1; border-color: var(--button-active-border); box-shadow: 0 0 5px rgba(160, 130, 150, 0.3); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0 6px; }
+        .slider-container span { font-size: 10px; color: inherit; opacity: 0.8; }
+        .slider { appearance: none; -webkit-appearance: none; width: 85px; height: 4px; background: var(--slider-track); border-radius: 2px; cursor: pointer; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; }
+        .slider::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; border: none; }
+
+        .title { position: absolute; top: 10px; left: 10px; font-size: 16px; opacity: var(--info-opacity); z-index: 10; transition: opacity .3s ease; pointer-events: none;}
+        .instructions { position: absolute; bottom: 10px; right: 10px; font-size: 12px; opacity: var(--info-opacity); z-index: 10; text-align: right; transition: opacity .3s ease; max-width: 250px; pointer-events: none;}
+        .title.hidden, .instructions.hidden { opacity: 0; }
+        .toggle-ui, .fullscreen-btn { position: absolute; top: 10px; z-index: 20; background: var(--button-bg); border: 1px solid var(--control-border); color: inherit; width: 32px; height: 32px; display: flex; justify-content: center; align-items: center; cursor: pointer; border-radius: 50%; font-size: 18px; transition: background .3s; }
+        .toggle-ui { right: 10px; }
+        .fullscreen-btn { right: 52px; } /* Adjusted position */
+        .toggle-ui:hover, .fullscreen-btn:hover { background: var(--button-hover-bg); }
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="main-canvas"></canvas>   <!-- Threads, Border -->
+        <canvas id="wave-canvas"></canvas>   <!-- Noise Overlay -->
+
+        <div class="title">Ocean Loom - Conway Depths</div>
+        <div class="instructions">Loading... Please wait.</div>
+
+        <div class="controls hidden"> <!-- Start hidden -->
+            <button id="resetBtn" title="Reset Cellular Automaton & Energy">Reset</button>
+            <button id="soundBtn" title="Toggle Audio Output">Enable Sound</button>
+            <button id="pauseBtn" title="Pause/Resume Simulation">Pause</button>
+            <button id="seedBtn" title="Generate New Cellular Automaton Pattern">New Seed</button>
+            <!-- Camera Button Removed -->
+            <br> <!-- Line break for clarity -->
+            <button class="voice-button active" data-voice="high" title="Toggle High Voice">High</button>
+            <button class="voice-button active" data-voice="mid" title="Toggle Mid Voice">Mid</button>
+            <button class="voice-button active" data-voice="low" title="Toggle Low Voice">Low</button>
+
+             <div class="slider-container"><span>Flow Speed</span><input type="range" min="0" max="100" value="35" class="slider" id="speedSlider" title="Speed of the overlay animation"></div>
+             <div class="slider-container"><span>Persistence</span><input type="range" min="0" max="100" value="80" class="slider" id="decaySlider" title="How long energy/smoke lingers"></div>
+             <div class="slider-container"><span>Impact Size</span><input type="range" min="0" max="100" value="40" class="slider" id="disturbanceSlider" title="Size of the interaction effect"></div>
+            <div class="slider-container"><span>Resonance</span><input type="range" min="0" max="100" value="55" class="slider" id="reverbSlider" title="Amount of reverb effect"></div>
+        </div>
+        <button class="toggle-ui" title="Toggle Controls Panel">::</button>
+        <button class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+    </div>
+    <!-- Camera elements removed -->
+
+    <script type="module"> // IMPORTANT: type="module"
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // --- Logging Utility ---
+        const LOG_LEVEL = { DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+        const currentLogLevel = LOG_LEVEL.INFO; // Set to DEBUG for more verbose logs
+        const log = (level, prefix, ...args) => {
+            if (level >= currentLogLevel) {
+                const style = level === LOG_LEVEL.ERROR ? 'color: red; font-weight: bold;' :
+                              level === LOG_LEVEL.WARN ? 'color: orange;' : '';
+                console.log(`%c[${prefix}]`, style, ...args);
+            }
+        };
+
+        log(LOG_LEVEL.INFO, 'SCRIPT', 'Script start: Module loaded.');
+
+        // --- Canvas Setup ---
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const waveCanvas = document.getElementById('wave-canvas');
+        const waveCtx = waveCanvas.getContext('2d');
+
+        // --- Noise Generator ---
+        const noise2D = createNoise2D(Math.random); // Seeded for consistency per session
+        log(LOG_LEVEL.DEBUG, 'CORE', 'Simplex Noise generator created.');
+
+        // --- Global State ---
+        let isPaused = false, lastTime = 0, animationFrameId = null, frameCounter = 0;
+        let soundEnabled = false, isAudioInitialized = false, audioInitPromise = null;
+
+        // --- CA Grid (Underlying Driver) ---
+        let caGrid = [], nextCaGrid = [];
+        let cellSize = 6; // Tuned: Larger for performance
+        let cols = 0, rows = 0;
+        const birthRange = [3], surviveRange = [2, 3]; // Standard Conway rules B3/S23
+        let caUpdateCounter = 0;
+        const caUpdateFrequency = 4; // Tuned: Update CA slightly less often
+
+        // --- Threads (Visual + Sound Mapping) ---
+        const threadCount = 120; // Tuned: Reduced slightly
+        let threads = [];
+        let threadWidth = 1.0; // Tuned: Kept thin
+        let threadSpacing = 0;
+        const baseThreadLightness = 12; // Tuned: Darker base
+        const energyToLightnessFactor = 6; // Tuned: Very subtle brightening
+
+        // --- Noise Overlay / Energy Grid (Visual Driver) ---
+        let visualEnergyGrid = [], nextVisualEnergyGrid = [];
+        let visualEnergyGridWidth = 0, visualEnergyGridHeight = 0;
+        const energyGridResolution = 30; // Tuned: Coarse grid for performance & look
+        let waveTime = Math.random() * 1000;
+        let noiseSpeed = 0.006;   // Tuned: Slower flow
+        let noiseScale = 0.006;   // Tuned: Finer noise pattern
+        let baseDensity = 0.06;  // Tuned: Lower base smoke density
+        let energyToDensityFactor = 3.5; // Tuned: Higher impact contrast
+        let energyDecay = 0.975;  // Tuned: Slower decay, more persistence
+        let energySpread = 0.035; // Tuned: Slightly less spread
+        let disturbanceRadiusFactor = 0.5; // Tuned: Moderate impact size base
+
+        // --- Sound System (Tone.js) ---
+        let Tone = window.Tone;
+        let reverb = null, delay = null;
+        let synths = { high: null, mid: null, low: null };
+        let voiceStates = { high: true, mid: true, low: true };
+        const scales = { // C Pentatonic Minor
+            high: ['C5', 'Eb5', 'F5', 'G5', 'Bb5', 'C6'],
+            mid: ['C4', 'Eb4', 'F4', 'G4', 'Bb4', 'C5'],
+            low: ['C3', 'Eb3', 'F3', 'G3', 'Bb3', 'C4']
+        };
+        let soundTriggerCounter = 0;
+        const soundCheckFrequency = 2; // Check sounds every 2 frames
+
+        // --- UI Elements ---
+        let controlsPanel, titleElement, instructionsElement, uiToggleButton, fullscreenButton;
+
+        // --- Initialization Functions ---
+
+        function setupUIReferences() {
+             controlsPanel = document.querySelector('.controls');
+             titleElement = document.querySelector('.title');
+             instructionsElement = document.querySelector('.instructions');
+             uiToggleButton = document.querySelector('.toggle-ui');
+             fullscreenButton = document.querySelector('.fullscreen-btn');
+             log(LOG_LEVEL.DEBUG, 'UI', 'UI references set.');
+             setInstructions("Initializing...");
+        }
+
+        function setInstructions(text) {
+            if (instructionsElement) instructionsElement.textContent = text;
+            else log(LOG_LEVEL.WARN, 'UI', 'Instructions element not found to set text.');
+        }
+
+        function resizeCanvas() {
+            log(LOG_LEVEL.INFO, 'CORE', "Resize event triggered.");
+            const container = document.querySelector('.container');
+            if (!container) { log(LOG_LEVEL.ERROR, 'CORE', "Container element not found!"); return; }
+            const width = container.offsetWidth;
+            const height = container.offsetHeight;
+            if (width === mainCanvas.width && height === mainCanvas.height) {
+                log(LOG_LEVEL.DEBUG, 'CORE', "Skipping resize, dimensions unchanged.");
+                return; // Avoid unnecessary work if size hasn't changed
+            }
+
+            log(LOG_LEVEL.INFO, 'CORE', `Resizing canvas to ${width}x${height}`);
+            mainCanvas.width = width; mainCanvas.height = height;
+            waveCanvas.width = width; waveCanvas.height = height;
+
+            cols = Math.floor(width / cellSize);
+            rows = Math.floor(height / cellSize);
+            if (cols <= 0 || rows <= 0) { log(LOG_LEVEL.ERROR, 'CORE', `Invalid grid dimensions after resize: ${cols}x${rows}`); return; }
+
+            log(LOG_LEVEL.DEBUG, 'CORE', `New grid dimensions: ${cols}x${rows}`);
+
+            initCaGrid();
+            initThreads();
+            initVisualEnergyGrid();
+
+            // Draw immediately after resize if not paused
+            if (!isPaused) {
+                requestAnimationFrame(() => { // Schedule draw for next available frame
+                     drawStaticElements();
+                     drawWaveOverlay();
+                 });
+            }
+            log(LOG_LEVEL.INFO, 'CORE', "Canvas resized and elements reinitialized.");
+        }
+
+        function initCaGrid(useRandom = true) {
+            log(LOG_LEVEL.DEBUG, 'CA', `Initializing CA grid (${cols}x${rows}). Random: ${useRandom}`);
+            caGrid = []; nextCaGrid = [];
+            for (let i = 0; i < cols; i++) {
+                caGrid[i] = []; nextCaGrid[i] = [];
+                for (let j = 0; j < rows; j++) {
+                    caGrid[i][j] = useRandom ? (Math.random() < 0.22) : false; // Slightly lower random density
+                    nextCaGrid[i][j] = false;
+                }
+            }
+        }
+
+        function initThreads() {
+             log(LOG_LEVEL.DEBUG, 'VISUAL', `Initializing ${threadCount} threads...`);
+             threads = [];
+             if (mainCanvas.width <= 0) { log(LOG_LEVEL.WARN, 'VISUAL', "Cannot init threads, canvas width is 0."); return; }
+             threadSpacing = mainCanvas.width / (threadCount + 1);
+             const baseHue = 355; // Crimson
+             for (let i = 0; i < threadCount; i++) {
+                 threads.push({
+                     x: (i + 1) * threadSpacing,
+                     width: threadWidth * (0.9 + Math.random() * 0.2),
+                     baseHue: baseHue + (Math.random() - 0.5) * 8, // More hue variation
+                     baseSaturation: 30 + Math.random() * 8, // Slightly more variation
+                     lastPlayTime: 0,
+                     cooldown: 450 + Math.random() * 350, // Tuned cooldown range
+                     energyThreshold: 0.48 + Math.random() * 0.12, // Tuned threshold range
+                     glowing: false
+                 });
+             }
+             if (isAudioInitialized) assignSoundToThreads(); // Remap if needed
+        }
+
+        function initVisualEnergyGrid() {
+            log(LOG_LEVEL.DEBUG, 'VISUAL', "Initializing Visual Energy grid...");
+            visualEnergyGridWidth = Math.ceil(mainCanvas.width / energyGridResolution);
+            visualEnergyGridHeight = Math.ceil(mainCanvas.height / energyGridResolution);
+            if (visualEnergyGridWidth <= 0 || visualEnergyGridHeight <= 0) { log(LOG_LEVEL.WARN, 'VISUAL', "Cannot init energy grid, invalid dimensions."); return; }
+            visualEnergyGrid = []; nextVisualEnergyGrid = [];
+            for (let y = 0; y < visualEnergyGridHeight; y++) {
+                visualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                nextVisualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+            }
+        }
+
+        // --- Tone.js Loading and Audio Initialization ---
+        function preloadTone() {
+             if (!audioInitPromise) {
+                 log(LOG_LEVEL.INFO, 'AUDIO', "Preloading Tone.js library...");
+                 audioInitPromise = new Promise((resolve, reject) => {
+                     // Check if already loaded (e.g., by another script or previous attempt)
+                     if (window.Tone && typeof window.Tone.start === 'function') {
+                         log(LOG_LEVEL.INFO, 'AUDIO', "Tone.js already available.");
+                         Tone = window.Tone; resolve(); return;
+                     }
+                     // Load script
+                     const script = document.createElement('script');
+                     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js'; // Use a specific version
+                     script.async = true;
+                     script.onload = () => {
+                         if (window.Tone && typeof window.Tone.start === 'function') {
+                             log(LOG_LEVEL.INFO, 'AUDIO', "Tone.js loaded successfully via script tag.");
+                             Tone = window.Tone; resolve();
+                         } else {
+                             log(LOG_LEVEL.ERROR, 'AUDIO', "Tone.js script loaded but Tone object not found or invalid.");
+                             reject(new Error("Tone.js loaded but failed validation."));
+                         }
+                     };
+                     script.onerror = (err) => { log(LOG_LEVEL.ERROR, 'AUDIO', "Failed to load Tone.js script:", err); reject(err); };
+                     document.head.appendChild(script);
+                 });
+             }
+             return audioInitPromise;
+         }
+
+        async function initAudio() {
+            if (isAudioInitialized) return true; // Already done
+            if (!preloadTone) { log(LOG_LEVEL.ERROR, 'AUDIO', "preloadTone function is missing!"); return false; }
+
+            log(LOG_LEVEL.INFO, 'AUDIO', "Attempting to initialize audio system...");
+            setInstructions("Initializing audio...");
+
+            try {
+                await preloadTone(); // Ensure library is loaded
+                if (!Tone) throw new Error("Tone.js object not available after preload.");
+
+                // Check context state *before* Tone.start()
+                if (Tone.context.state !== 'running') {
+                    log(LOG_LEVEL.INFO, 'AUDIO', `Tone context state is '${Tone.context.state}'. Attempting Tone.start()... (Requires User Interaction)`);
+                     // NOTE: This might still fail if called without a prior user gesture (like the button click)
+                     // The button click handler is the primary place this should succeed.
+                    await Tone.start();
+                    log(LOG_LEVEL.INFO, 'AUDIO', `Tone Audio Context Started. New state: '${Tone.context.state}'`);
+                } else {
+                     log(LOG_LEVEL.INFO, 'AUDIO', "Tone context already running.");
+                }
+
+                // Setup audio graph components
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Setting up reverb...");
+                reverb = new Tone.Reverb({ decay: 3.8, preDelay: 0.01, wet: 0.55 }).toDestination(); // Tuned reverb
+                await reverb.generate(); // Wait for impulse response
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Reverb generated. Setting up delay...");
+                delay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.28, wet: 0.22 }).connect(reverb); // Tuned delay
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Delay created. Setting up synths...");
+
+                // Tuned Synths
+                synths.high = new Tone.PluckSynth({ attackNoise: 0.6, dampening: 3800, resonance: 0.91, release: 1.0, volume: -19 }).connect(delay);
+                synths.mid = new Tone.PluckSynth({ attackNoise: 0.8, dampening: 3000, resonance: 0.89, release: 1.1, volume: -17 }).connect(delay);
+                synths.low = new Tone.PluckSynth({ attackNoise: 1.0, dampening: 2000, resonance: 0.87, release: 1.5, volume: -15 }).connect(delay);
+                log(LOG_LEVEL.INFO, 'AUDIO', "Synths created.");
+
+                isAudioInitialized = true;
+                soundEnabled = true; // Enable sound only after successful initialization
+                if(document.getElementById('soundBtn')) document.getElementById('soundBtn').textContent = "Sound Off";
+                assignSoundToThreads(); // Map sounds now
+                setInstructions("Audio ready. Interact!");
+                log(LOG_LEVEL.INFO, 'AUDIO', "Audio initialization complete.");
+                return true;
+
+            } catch (error) {
+                log(LOG_LEVEL.ERROR, 'AUDIO', "Audio initialization failed:", error);
+                setInstructions(`Audio failed: ${error.message}. Check console.`);
+                isAudioInitialized = false; soundEnabled = false;
+                 if(document.getElementById('soundBtn')) document.getElementById('soundBtn').textContent = "Enable Sound";
+                // Clean up potentially created nodes? Maybe not necessary if Tone handles it.
+                reverb?.dispose(); delay?.dispose();
+                Object.values(synths).forEach(s => s?.dispose());
+                reverb = null; delay = null; synths = { high: null, mid: null, low: null };
+                return false;
+            }
+        }
+
+        function assignSoundToThreads() {
+             if (!threads || threads.length === 0) { log(LOG_LEVEL.WARN, 'AUDIO', "Cannot assign sound: Threads array empty."); return; }
+             if (!isAudioInitialized) { log(LOG_LEVEL.WARN, 'AUDIO', "Cannot assign sound: Audio not initialized."); return; }
+
+             log(LOG_LEVEL.DEBUG, 'AUDIO', "Assigning sounds to threads...");
+             const third = Math.ceil(threadCount / 3);
+             const segmentSize = Math.max(1, Math.floor(third / scales.high.length));
+
+             threads.forEach((thread, i) => {
+                 let voice, noteIndexBase;
+                 if (i < third) { voice = 'high'; noteIndexBase = i; }
+                 else if (i < third * 2) { voice = 'mid'; noteIndexBase = i - third; }
+                 else { voice = 'low'; noteIndexBase = i - third * 2; }
+
+                 const scale = scales[voice];
+                 if (!scale) { log(LOG_LEVEL.WARN, 'AUDIO', `Invalid voice '${voice}' for thread ${i}`); return; }
+                 const noteIndex = Math.min(scale.length - 1, Math.floor(noteIndexBase / segmentSize));
+                 thread.voice = voice;
+                 thread.note = scale[noteIndex];
+             });
+             log(LOG_LEVEL.INFO, 'AUDIO', "Sounds assigned to threads.");
+         }
+
+
+        // --- Core Update Logic ---
+
+        function countNeighbors(x, y) { /* Standard Conway B3/S23 neighbor count */ let s=0;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){if(i===0&&j===0)continue;const c=(x+i+cols)%cols,r=(y+j+rows)%rows;if(caGrid[c]?.[r])s++;}return s;} // Added ?. for safety
+        function updateCaGrid() {
+            let changed = false;
+             if (!caGrid || !nextCaGrid || caGrid.length !== cols || nextCaGrid.length !== cols) {
+                 log(LOG_LEVEL.WARN, 'CA', "Grid update skipped, grids invalid.");
+                 return false; // Grids not ready
+             }
+            for (let i = 0; i < cols; i++) {
+                 if (!caGrid[i] || !nextCaGrid[i] || caGrid[i].length !== rows || nextCaGrid[i].length !== rows) continue; // Skip invalid rows
+                for (let j = 0; j < rows; j++) {
+                    const neighbors = countNeighbors(i, j);
+                    const alive = caGrid[i][j];
+                    let nextState = false;
+                    if (alive) { nextState = surviveRange.includes(neighbors); }
+                    else { nextState = birthRange.includes(neighbors); }
+                    nextCaGrid[i][j] = nextState;
+                    if (nextState !== alive) changed = true;
+                }
+            }
+             [caGrid, nextCaGrid] = [nextCaGrid, caGrid]; // Swap
+             return changed;
+        }
+
+        function updateEnergyFromCA() {
+             const energyToAdd = 0.15; // Tuned: Slightly more impact from CA
+             if (!caGrid || !visualEnergyGrid || visualEnergyGrid.length === 0) return; // Safety check
+
+             for (let i = 0; i < cols; i++) {
+                 if (!caGrid[i]) continue;
+                 for (let j = 0; j < rows; j++) {
+                     if (caGrid[i][j]) { // Only add energy for alive cells
+                         const gridX = Math.floor(i * cellSize / energyGridResolution);
+                         const gridY = Math.floor(j * cellSize / energyGridResolution);
+                         if (visualEnergyGrid[gridY]?.[gridX] !== undefined) { // Check existence
+                             visualEnergyGrid[gridY][gridX] = Math.min(1.0, visualEnergyGrid[gridY][gridX] + energyToAdd);
+                         }
+                     }
+                 }
+             }
+        }
+
+        function updateVisualEnergyGrid() {
+            if(!visualEnergyGrid || visualEnergyGrid.length === 0 || !nextVisualEnergyGrid || nextVisualEnergyGrid.length === 0) return; // Safety
+
+            for(let y=0; y<visualEnergyGridHeight; y++) {
+                if (!visualEnergyGrid[y] || !nextVisualEnergyGrid[y]) continue; // Check row validity
+                for(let x=0; x<visualEnergyGridWidth; x++) {
+                    let cE = visualEnergyGrid[y][x] || 0; // Default to 0 if undefined
+                    let sE = 0;
+                    // Check neighbors safely
+                    sE += visualEnergyGrid[y-1]?.[x] || 0;
+                    sE += visualEnergyGrid[y+1]?.[x] || 0;
+                    sE += visualEnergyGrid[y]?.[x-1] || 0;
+                    sE += visualEnergyGrid[y]?.[x+1] || 0;
+                    // Diagonal spread (optional, subtle)
+                    // sE += (visualEnergyGrid[y-1]?.[x-1] || 0) * 0.707;
+                    // sE += (visualEnergyGrid[y-1]?.[x+1] || 0) * 0.707;
+                    // sE += (visualEnergyGrid[y+1]?.[x-1] || 0) * 0.707;
+                    // sE += (visualEnergyGrid[y+1]?.[x+1] || 0) * 0.707;
+
+                    let spreadFactor = energySpread / 4; // Adjust if using diagonal spread
+                    nextVisualEnergyGrid[y][x] = Math.max(0, Math.min(1.0, cE * energyDecay + sE * spreadFactor));
+                }
+            }
+            [visualEnergyGrid, nextVisualEnergyGrid] = [nextVisualEnergyGrid, visualEnergyGrid]; // Swap
+        }
+
+        function getEnergyAt(x, y) {
+            if(!visualEnergyGrid || visualEnergyGrid.length === 0) return 0;
+            const gXf=x/energyGridResolution,gYf=y/energyGridResolution;
+            const gX0=Math.floor(gXf),gY0=Math.floor(gYf);
+            const gX1=gX0+1,gY1=gY0+1;
+            if(gY0<0||gY1>=visualEnergyGridHeight||gX0<0||gX1>=visualEnergyGridWidth)return 0;
+            const tx=gXf-gX0,ty=gYf-gY0;
+            try{ // Add more robust checking for potentially undefined grid cells during resize/init races
+                const e00=visualEnergyGrid[gY0]?.[gX0]||0, e10=visualEnergyGrid[gY0]?.[gX1]||0;
+                const e01=visualEnergyGrid[gY1]?.[gX0]||0, e11=visualEnergyGrid[gY1]?.[gX1]||0;
+                const ex0=e00+(e10-e00)*tx, ex1=e01+(e11-e01)*tx;
+                return ex0+(ex1-ex0)*ty;
+            } catch (e) { log(LOG_LEVEL.WARN, 'VISUAL', `Energy lookup error near [${gY0},${gX0}]-[${gY1},${gX1}]`, e); return 0; }
+        }
+
+        function updateThreadSounds() {
+             if (!soundEnabled || !isAudioInitialized) return;
+
+             soundTriggerCounter++;
+             if (soundTriggerCounter % soundCheckFrequency !== 0) return;
+
+             const now = Tone.now(); // Use Tone's time for scheduling accuracy
+             threads.forEach(thread => {
+                 if (!thread.voice || !voiceStates[thread.voice] || !synths[thread.voice]) return; // Check synth exists
+
+                 const currentEnergy = getEnergyAt(thread.x, mainCanvas.height / 2); // Sample energy under thread
+
+                 if (currentEnergy > thread.energyThreshold && now >= thread.lastPlayTime + thread.cooldown / 1000) {
+                     const velocity = Math.min(0.8, 0.15 + currentEnergy * 0.75); // Tuned velocity curve
+                     try {
+                         synths[thread.voice].triggerAttack(thread.note, now + 0.03, velocity); // Schedule slightly ahead
+                         log(LOG_LEVEL.DEBUG, 'AUDIO', `Triggered ${thread.voice} ${thread.note} (E:${currentEnergy.toFixed(2)} V:${velocity.toFixed(2)})`);
+                     } catch (e) { log(LOG_LEVEL.WARN, 'AUDIO', `Tone trigger error on ${thread.voice}:`, e); }
+
+                     thread.lastPlayTime = now;
+                     thread.glowing = true;
+                     setTimeout(() => { thread.glowing = false; }, 180); // Shorter, snappier glow
+                 } else if (currentEnergy < 0.05 && thread.glowing) {
+                      thread.glowing = false; // Ensure glow stops if energy drops significantly
+                 }
+             });
+        }
+
+
+        // --- Interaction ---
+        function addDisturbance(canvasX, canvasY, radius = 10, strength = 1) {
+             log(LOG_LEVEL.DEBUG, 'INTERACT', `Disturbance at (${canvasX.toFixed(0)}, ${canvasY.toFixed(0)}) R:${radius} S:${strength.toFixed(2)}`);
+             // Add energy to visual grid
+             const gridX = Math.floor(canvasX / energyGridResolution);
+             const gridY = Math.floor(canvasY / energyGridResolution);
+             const gridRadius = Math.max(1, Math.ceil(radius / energyGridResolution * disturbanceRadiusFactor)); // Ensure radius >= 1
+             for(let dy=-gridRadius; dy<=gridRadius; dy++) for(let dx=-gridRadius; dx<=gridRadius; dx++){
+                 const gx=gridX+dx, gy=gridY+dy;
+                 if(visualEnergyGrid[gy]?.[gx] !== undefined){ // Check if cell exists
+                     const dist=Math.sqrt(dx*dx + dy*dy);
+                     if(dist <= gridRadius){
+                         const falloff=Math.pow(Math.max(0, 1-dist/gridRadius), 1.6); // Tuned falloff
+                         const impact=strength*falloff*0.85; // Tuned impact strength
+                         visualEnergyGrid[gy][gx]=Math.min(1.0, visualEnergyGrid[gy][gx]+impact);
+                     }
+                 }
+             }
+
+             // Trigger immediate sound
+              if (soundEnabled && isAudioInitialized) {
+                 let closestIdx = -1, minDistance = Infinity;
+                 threads.forEach((thread, idx) => { const d = Math.abs(thread.x - canvasX); if (d < minDistance) { minDistance = d; closestIdx = idx; } });
+                 if (closestIdx !== -1 && minDistance < threadSpacing * 2) { // Tuned: Slightly wider range
+                     const thread = threads[closestIdx];
+                     if (thread.voice && voiceStates[thread.voice] && synths[thread.voice]) {
+                         const now = Tone.now();
+                         // Allow faster triggering for direct interaction compared to grid cooldown
+                         if (now >= thread.lastPlayTime + (thread.cooldown / 1000) * 0.3) {
+                            const velocity = Math.min(0.9, 0.35 + strength * 0.55); // Tuned interaction velocity
+                            try {
+                                synths[thread.voice].triggerAttack(thread.note, now + 0.01, velocity);
+                                log(LOG_LEVEL.DEBUG, 'AUDIO', `Direct Trigger ${thread.voice} ${thread.note} (S:${strength.toFixed(2)} V:${velocity.toFixed(2)})`);
+                            } catch(e) { log(LOG_LEVEL.WARN, 'AUDIO', "Direct trigger error:", e); }
+                            thread.lastPlayTime = now; // Update last play time
+                            thread.glowing = true;
+                            setTimeout(() => { thread.glowing = false; }, 180);
+                         }
+                     }
+                 }
+             }
+        }
+
+
+        // --- Drawing ---
+        function drawStaticElements() {
+             if (!mainCtx || mainCanvas.width <= 0) return;
+             mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+             const borderHeight = 20; // Tuned: Slightly smaller border
+             mainCtx.fillStyle = '#1f1a24'; // Tuned: Darker, slightly purple border color
+             mainCtx.fillRect(0, 0, mainCanvas.width, borderHeight);
+             mainCtx.fillStyle = 'rgba(0,0,0,0.25)'; mainCtx.fillRect(0, 0, mainCanvas.width, 2);
+             mainCtx.fillStyle = 'rgba(55,45,60,0.45)'; mainCtx.fillRect(0, borderHeight - 2, mainCanvas.width, 2);
+
+             mainCtx.lineWidth = threadWidth;
+             threads.forEach(thread => {
+                 const e = getEnergyAt(thread.x, mainCanvas.height / 2);
+                 const glowFactor = thread.glowing ? 1 : 0;
+                 const l = (baseThreadLightness + e * energyToLightnessFactor + glowFactor * (var(--thread-active-l-boost) || 10)); // Use CSS var or default
+                 const s = thread.baseSaturation + glowFactor * 8;
+                 mainCtx.strokeStyle = `hsl(${thread.baseHue}, ${s}%, ${l}%)`;
+                 mainCtx.globalAlpha = 0.45 + e * 0.4 + glowFactor * 0.2; // Tuned alpha blend
+
+                 mainCtx.beginPath();
+                 mainCtx.moveTo(thread.x, borderHeight);
+                 mainCtx.lineTo(thread.x, mainCanvas.height);
+                 mainCtx.stroke();
+             });
+             mainCtx.globalAlpha = 1.0; // Reset global alpha
+        }
+
+        function drawWaveOverlay() {
+            if (!waveCtx || !visualEnergyGrid || visualEnergyGrid.length === 0 || waveCanvas.width <= 0) return;
+            waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+            const sampleStep = 4; // Tuned: Slightly finer sampling
+            const time = waveTime;
+            const overlayColor = getComputedStyle(document.documentElement).getPropertyValue('--overlay-color') || 'rgba(200, 195, 210, 1.0)';
+            const baseColor = overlayColor.substring(overlayColor.indexOf('(') + 1, overlayColor.lastIndexOf(',')).trim(); // Extract 'r, g, b'
+
+            for (let y = 0; y < waveCanvas.height; y += sampleStep) {
+                for (let x = 0; x < waveCanvas.width; x += sampleStep) {
+                    const nVal = (noise2D(x * noiseScale, y * noiseScale + time) + 1) / 2; // Noise 0-1
+                    const lEnergy = getEnergyAt(x, y);
+                    const dens = baseDensity + lEnergy * energyToDensityFactor * nVal;
+                    const alpha = Math.min(0.9, Math.max(0, dens));
+                    if (alpha > 0.015) { // Tuned: Slightly higher threshold to draw
+                        // Apply energy influence to alpha quadratically for more contrast
+                        waveCtx.fillStyle = `rgba(${baseColor}, ${alpha * alpha * 0.85})`; // Tuned alpha curve
+                        waveCtx.fillRect(x, y, sampleStep, sampleStep);
+                    }
+                }
+            }
+        }
+
+
+        // --- Animation Loop ---
+        function animate(currentTime) {
+            animationFrameId = requestAnimationFrame(animate);
+            if (!lastTime) lastTime = currentTime;
+
+            try {
+                if (!isPaused) {
+                    waveTime += noiseSpeed; // Update noise time
+
+                    // Update CA less often
+                    caUpdateCounter++;
+                    if (caUpdateCounter >= caUpdateFrequency) {
+                        if (updateCaGrid()) { updateEnergyFromCA(); }
+                        caUpdateCounter = 0;
+                    }
+
+                    updateVisualEnergyGrid(); // Update visual energy (decay/spread)
+                    updateThreadSounds();     // Check sound triggers based on visual energy
+
+                    // Camera disabled
+                }
+
+                // --- Drawing --- (Always draw unless completely stopped)
+                drawStaticElements();
+                drawWaveOverlay();
+
+                // --- Logging --- (Throttled)
+                frameCounter++;
+                if (frameCounter % 120 === 0) { // Log every ~2 seconds at 60fps
+                    log(LOG_LEVEL.DEBUG, 'LOOP', `Frame ${frameCounter}. Paused: ${isPaused}. Audio: ${soundEnabled}/${isAudioInitialized}`);
+                }
+
+            } catch (error) {
+                 log(LOG_LEVEL.ERROR, 'LOOP', "Error in animation loop:", error);
+                 isPaused = true;
+                 if(document.getElementById('pauseBtn')) document.getElementById('pauseBtn').textContent = 'ERR!';
+                 setInstructions("Runtime Error! Check console. Paused.");
+                 cancelAnimationFrame(animationFrameId); // Stop loop on critical error
+            } finally {
+                 lastTime = currentTime;
+            }
+        }
+
+        // --- Event Listeners & UI Setup ---
+        function setupEventListeners() {
+             log(LOG_LEVEL.INFO, 'INIT', "Setting up event listeners...");
+             // Use a single resize handler with debouncing/throttling for performance
+             let resizeTimeout;
+             window.addEventListener('resize', () => {
+                 clearTimeout(resizeTimeout);
+                 resizeTimeout = setTimeout(resizeCanvas, 150); // Debounce resize calls
+             });
+
+             // Pointer interaction
+             const handlePointerDown = (e) => { if (!isPaused) { e.preventDefault(); mainCanvas.style.cursor = 'grabbing'; mainCanvas.setPointerCapture(e.pointerId); addDisturbance(e.clientX, e.clientY, 90, 1.0); } };
+             const handlePointerMove = (e) => { if (!isPaused && e.buttons === 1 && mainCanvas.hasPointerCapture(e.pointerId)) { e.preventDefault(); addDisturbance(e.clientX, e.clientY, 70, 0.6); } };
+             const releasePointer = (e) => { mainCanvas.style.cursor = 'grab'; if (mainCanvas.hasPointerCapture(e.pointerId)) mainCanvas.releasePointerCapture(e.pointerId); };
+             mainCanvas.style.cursor = 'grab';
+             mainCanvas.addEventListener('pointerdown', handlePointerDown);
+             mainCanvas.addEventListener('pointermove', handlePointerMove);
+             mainCanvas.addEventListener('pointerup', releasePointer);
+             mainCanvas.addEventListener('pointerleave', releasePointer); // Release capture if pointer leaves canvas
+             mainCanvas.addEventListener('pointercancel', releasePointer);
+             mainCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+             // Button Controls
+             document.getElementById('resetBtn')?.addEventListener('click', () => { log(LOG_LEVEL.INFO, 'UI', "Reset clicked"); initCaGrid(false); initVisualEnergyGrid(); }); // Reset to empty state
+             document.getElementById('pauseBtn')?.addEventListener('click', function() { isPaused = !isPaused; this.textContent = isPaused ? 'Resume' : 'Pause'; log(LOG_LEVEL.INFO, 'UI', `Simulation ${isPaused ? 'Paused' : 'Resumed'}`); });
+             document.getElementById('seedBtn')?.addEventListener('click', () => { log(LOG_LEVEL.INFO, 'UI', "New Seed clicked"); initCaGrid(true); }); // Reset to random state
+             document.getElementById('soundBtn')?.addEventListener('click', async function() {
+                 if (!isAudioInitialized && !soundEnabled) { // First time enabling
+                    log(LOG_LEVEL.INFO, 'UI', "Enable Sound clicked (First Time / After Error)");
+                    this.textContent = "Loading..."; this.disabled = true;
+                    const success = await initAudio(); // This requires user gesture, should succeed here
+                    if(success) { this.textContent="Sound Off"; } else { this.textContent = "Sound Error"; setInstructions("Failed to start audio. Check browser permissions/console."); }
+                    this.disabled = false;
+                 } else if (soundEnabled) { // Disabling sound
+                    log(LOG_LEVEL.INFO, 'UI', "Disable Sound clicked");
+                    soundEnabled = false; // Logic toggle
+                    // Optional: Gently mute master gain instead of just toggling flag
+                    // if (Tone && masterGain) Tone.Master.mute = true; // Or ramp down gain
+                    this.textContent = "Enable Sound";
+                 } else { // Re-enabling sound (already initialized)
+                    log(LOG_LEVEL.INFO, 'UI', "Enable Sound clicked (Re-enabling)");
+                    soundEnabled = true;
+                    // Optional: Unmute master gain
+                    // if (Tone && masterGain) Tone.Master.mute = false; // Or ramp up gain
+                    this.textContent = "Sound Off";
+                 }
+             });
+             // Camera button removed
+
+             document.querySelectorAll('.voice-button').forEach(b => b.addEventListener('click', function() { const v = this.dataset.voice; if(v){voiceStates[v] = !voiceStates[v]; this.classList.toggle('active'); log(LOG_LEVEL.INFO, 'UI', `Voice ${v} ${voiceStates[v] ? 'enabled' : 'disabled'}`);}}));
+             document.getElementById('reverbSlider')?.addEventListener('input', (e) => { if (reverb?.wet) reverb.wet.value = parseInt(e.target.value) / 100; });
+             document.getElementById('speedSlider')?.addEventListener('input', updateParametersFromSliders);
+             document.getElementById('decaySlider')?.addEventListener('input', updateParametersFromSliders);
+             document.getElementById('disturbanceSlider')?.addEventListener('input', updateParametersFromSliders);
+
+             // UI Toggles
+             uiToggleButton?.addEventListener('click', () => { const hidden = controlsPanel.classList.toggle('hidden'); titleElement.classList.toggle('hidden', hidden); instructionsElement.classList.toggle('hidden', hidden); log(LOG_LEVEL.INFO, 'UI', `Controls ${hidden ? 'hidden' : 'shown'}`);});
+             fullscreenButton?.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else document.querySelector('.container')?.requestFullscreen(); log(LOG_LEVEL.INFO, 'UI', `Fullscreen toggled`);} catch(e){ log(LOG_LEVEL.ERROR, 'UI', "Fullscreen error:", e);} });
+             log(LOG_LEVEL.INFO, 'INIT', "Event listeners attached.");
+        }
+
+         function updateParametersFromSliders() {
+            try {
+                // Use parseFloat for potentially smoother intermediate values if needed, parseInt is fine here
+                noiseSpeed = 0.001 + (parseInt(document.getElementById('speedSlider')?.value ?? 40)/100) * 0.025;
+                energyDecay = 0.92 + (parseInt(document.getElementById('decaySlider')?.value ?? 80)/100) * 0.078; // Range 0.92 - 0.998
+                disturbanceRadiusFactor = 0.1 + (parseInt(document.getElementById('disturbanceSlider')?.value ?? 40)/100) * 0.9;
+                if(isAudioInitialized && reverb?.wet) reverb.wet.value = parseInt(document.getElementById('reverbSlider')?.value ?? 55)/100;
+                log(LOG_LEVEL.DEBUG, 'PARAM', `Params updated: speed=${noiseSpeed.toFixed(4)}, decay=${energyDecay.toFixed(4)}, impact=${disturbanceRadiusFactor.toFixed(3)}, reverb=${reverb?.wet?.value.toFixed(2)}`);
+            } catch (e) { log(LOG_LEVEL.ERROR, 'PARAM', "Error updating params from sliders:", e); }
+         }
+
+        // --- Global Init ---
+        function init() {
+            log(LOG_LEVEL.INFO, 'INIT', "Initializing simulation...");
+            try {
+                setupUIReferences(); // Get UI elements first
+                resizeCanvas(); // Setup grids, threads etc. based on initial size
+                setupEventListeners(); // Attach listeners to UI
+
+                // Start with UI hidden
+                controlsPanel?.classList.add('hidden');
+                titleElement?.classList.add('hidden');
+                instructionsElement?.classList.add('hidden');
+
+                if (animationFrameId) cancelAnimationFrame(animationFrameId); // Clear previous loop if any
+                frameCounter = 0;
+                lastTime = performance.now();
+                animationFrameId = requestAnimationFrame(animate); // Start the loop
+                log(LOG_LEVEL.INFO, 'INIT', "Initialization complete. Animation loop started.");
+                setInstructions("Click 'Enable Sound' then interact.");
+
+            } catch (error) {
+                log(LOG_LEVEL.ERROR, 'INIT', "Initialization failed:", error);
+                setInstructions("Initialization Error! Check console.");
+                // Attempt to display error to user more directly if possible
+                alert(`Initialization Error: ${error.message}. Please check the console (F12).`);
+            }
+        }
+
+        // --- Start ---
+        if (document.readyState === 'loading') {
+            window.addEventListener('DOMContentLoaded', init);
+        } else {
+            init(); // DOM already ready
+        }
+
+    </script>
+</body>
+</html>

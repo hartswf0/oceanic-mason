@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobode — A Ritual System for Time, Enclosure, and Capture</title>
+    <style>
+        /* Base Styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background-color: #050812;
+            font-family: 'Times New Roman', serif;
+            color: rgba(255, 255, 255, 0.5);
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+        
+        /* Canvas Layers */
+        .canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #oceanLayer {
+            z-index: 1;
+            opacity: 0.9;
+        }
+        
+        #threadLayer {
+            z-index: 2;
+        }
+        
+        #patternLayer {
+            z-index: 3;
+            pointer-events: none;
+        }
+        
+        #glyphLayer {
+            z-index: 4;
+            pointer-events: none;
+        }
+        
+        #interactionLayer {
+            z-index: 5;
+        }
+        
+        /* Text Elements */
+        .text-fragment {
+            position: absolute;
+            font-family: 'Times New Roman', serif;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 1.2rem;
+            line-height: 1.4;
+            max-width: 300px;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: opacity 3s ease, transform 3s ease;
+            pointer-events: none;
+            text-align: center;
+            font-style: italic;
+        }
+        
+        .text-fragment.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* Title */
+        .title {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.3);
+            letter-spacing: 0.2em;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 5s ease;
+        }
+        
+        /* Instructions */
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.2);
+            font-style: italic;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 5s ease;
+        }
+        
+        /* Interaction Cues */
+        .interaction-cue {
+            position: absolute;
+            bottom: 60px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 2s ease;
+        }
+        
+        .key-hint {
+            display: inline-block;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            margin: 0 5px;
+            border-radius: 3px;
+        }
+        
+        /* Philosophical Quote */
+        .quote {
+            position: absolute;
+            bottom: 60px;
+            width: 100%;
+            text-align: center;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.15);
+            font-style: italic;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 5s ease;
+            pointer-events: none;
+            padding: 0 20%;
+        }
+        
+        /* Video Element for Camera */
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* Loading Screen */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #050203;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 3s ease;
+        }
+        
+        .loading h1 {
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 2rem;
+            letter-spacing: 0.3em;
+        }
+        
+        .loading p {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.3);
+            margin-top: 1rem;
+            font-style: italic;
+        }
+        
+        .thread-icon {
+            width: 50px;
+            height: 100px;
+            position: relative;
+            margin-bottom: 2rem;
+        }
+        
+        .thread-line {
+            position: absolute;
+            width: 1px;
+            background-color: rgba(255, 255, 255, 0.5);
+            top: 0;
+            bottom: 0;
+            animation: threadPulse 4s infinite;
+        }
+        
+        @keyframes threadPulse {
+            0% { opacity: 0.2; height: 80%; top: 10%; }
+            50% { opacity: 0.8; height: 100%; top: 0; }
+            100% { opacity: 0.2; height: 80%; top: 10%; }
+        }
+        
+        /* Thread lines positioned across the icon */
+        .thread-line:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .thread-line:nth-child(2) { left: 30%; animation-delay: 0.5s; }
+        .thread-line:nth-child(3) { left: 50%; animation-delay: 1s; }
+        .thread-line:nth-child(4) { left: 70%; animation-delay: 1.5s; }
+        .thread-line:nth-child(5) { left: 90%; animation-delay: 2s; }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading" id="loadingScreen">
+        <h1>NOBODE</h1>
+        <div class="thread-icon">
+            <div class="thread-line"></div>
+            <div class="thread-line"></div>
+            <div class="thread-line"></div>
+            <div class="thread-line"></div>
+            <div class="thread-line"></div>
+        </div>
+        <p>A Ritual System for Time, Enclosure, and Capture</p>
+        <p id="loadingText">Preparing the loom...</p>
+    </div>
+    
+    <!-- Main Canvas Container -->
+    <div class="canvas-container">
+        <canvas id="oceanLayer"></canvas>
+        <canvas id="threadLayer"></canvas>
+        <canvas id="patternLayer"></canvas>
+        <canvas id="glyphLayer"></canvas>
+        <canvas id="interactionLayer"></canvas>
+    </div>
+    
+    <!-- Text Elements -->
+    <div class="title" id="title">Nobode</div>
+    <div class="instructions" id="instructions">Move slowly. The loom remembers.</div>
+    <div class="interaction-cue" id="interactionCue">
+        Press <span class="key-hint">K</span> to create knots | 
+        Press <span class="key-hint">U</span> to unweave | 
+        Press <span class="key-hint">Space</span> for camera
+    </div>
+    <div class="quote" id="quote"></div>
+    
+    <!-- Camera Video Element (hidden) -->
+    <video id="cameraFeed" playsinline></video>
+    
+    <!-- Audio Elements -->
+    <audio id="ambientSound" loop preload="auto"></audio>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.30/Tone.js"></script>
+    <script>
+        // ==========================================
+        // NOBODE: A RITUAL SYSTEM
+        // ==========================================
+        
+        // Constants & State
+        const threadCount = 140; // Dense vertical threads
+        const threadWidth = 0.8; // Thin threads
+        const baseThreadLightness = 10;
+        const energyToLightnessFactor = 5;
+        const energyGridResolution = 28;
+        const memoryPulseInterval = 20000;
+        const memoryPulseStrength = 0.08;
+        
+        let visualEnergyGrid = [];
+        let nextVisualEnergyGrid = [];
+        let memoryGrid = [];
+        let nextMemoryGrid = [];
+        let visualEnergyGridWidth = 0;
+        let visualEnergyGridHeight = 0;
+        let energyDecay = 0.982;
+        let energySpread = 0.03;
+        let disturbanceRadiusFactor = 0.45;
+        let memoryDecay = 0.998;
+        let nextMemoryPulseTime = 0;
+        
+        let oceanTime = 0;
+        let oceanDepth = 0.2;
+        let currentTide = 0;
+        
+        let mouseX = 0;
+        let mouseY = 0;
+        let isMouseDown = false;
+        let lastInteractionTime = 0;
+        
+        let cameraEnabled = false;
+        let video = null;
+        let offCanvas = null;
+        let offCtx = null;
+        let prevImageData = null;
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 100;
+        let motionThreshold = 20;
+        let offscreenCanvas = null;
+        let offscreenCtx = null;
+        
+        let isAudioInitialized = false;
+        let soundEnabled = false;
+        let Tone = null;
+        let synths = {};
+        let threadSynths = [];
+        
+        let lastTime = 0;
+        let elapsedTime = 0;
+        let isPaused = false;
+        let isInitialized = false;
+        let animationFrameId = null;
+        
+        // Canvas Elements
+        let oceanCanvas = null;
+        let threadCanvas = null;
+        let interactionCanvas = null;
+        let patternCanvas = null;
+        let glyphCanvas = null;
+        
+        // Context Objects
+        let oceanCtx = null;
+        let threadCtx = null;
+        let interactionCtx = null;
+        let patternCtx = null;
+        let glyphCtx = null;
+        
+        // Video Element for Camera
+        let videoElement = null;
+        
+        // Audio Element
+        let ambientSound = null;
+        
+        // System State
+        let threads = [];
+        let patterns = [];
+        let activePatterns = [];
+        let glyphs = [];
+        let currentQuoteIndex = 0;
+        let quoteChangeInterval = 30000; // 30 seconds
+        let nextQuoteChangeTime = 0;
+        let glyphProbability = 0.001; // Chance of glyph appearing
+        
+        // Narrative System
+        const narrativeFragments = [
+            "The threads remember what you have forgotten.",
+            "Time is both tide and thread.",
+            "The loom knows how you move, not just what you do.",
+            "You are not the sole author.",
+            "To engage is to drift within it.",
+            "The ocean is the uninvited third.",
+            "Patterns degrade, erode, and knot themselves as the body delays.",
+            "Progress is unreliable; nothing is ever finished.",
+            "Every action is an imprint, not just a command.",
+            "The loom is a threshold, neither open nor closed.",
+            "You are not outside the loom, but within it.",
+            "To navigate is to feel both held and restricted.",
+            "You are captured by the loom as much as you capture stories within it.",
+            "Movement is not linear. There is no map, no clear goal.",
+            "Stories emerge like flotsam, occasionally drifting into view.",
+            "The loom asks to be worked not used.",
+            "Threads demand tension, patience, and listening.",
+            "It teaches through misrecognition and dream logic.",
+            "Penelope waits, and so do you."
+        ];
+        
+        // Philosophical quotes about digital sovereignty
+        const philosophicalQuotes = [
+            "Software is not a tool but an ontological force that shapes reality.",
+            "True sovereignty requires breaking from extractive computational models.",
+            "The digital is not separate from the physical; both are entangled in the same ontological fabric.",
+            "Computation as currently practiced is an extractive manipulation of spacetime.",
+            "The anti-tool erases its corporate origins and becomes a vessel for ontological rebellion.",
+            "Digital sovereignty begins when we recognize the violence inherent in current computational paradigms.",
+            "The loom is not a machine but a companion in the ritual of unweaving extractive logic.",
+            "Non-Turing models of computation may be the only path to true digital sovereignty.",
+            "The ritual of weaving is a form of resistance against the extraction of meaning.",
+            "In the space between threads lies the possibility of non-extractive computation."
+        ];
+        
+        // Initialize Thread System
+        function initThreads() {
+            console.log("Initializing threads...");
+            threads = [];
+            
+            // Calculate thread spacing
+            const threadSpacing = threadCanvas.width / (threadCount + 1);
+            
+            // Create threads
+            const baseHue = 350; // Reddish base hue
+            for (let i = 0; i < threadCount; i++) {
+                const swaySpeed = 0.1 + Math.random() * 0.2;
+                const swayAmount = 0.6 + Math.random() * 0.8;
+                
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    width: threadWidth * (0.85 + Math.random() * 0.3),
+                    baseHue: baseHue + (Math.random() - 0.5) * 12,
+                    baseSaturation: 25 + Math.random() * 10,
+                    swayOffset: Math.random() * Math.PI * 2,
+                    swaySpeed: swaySpeed,
+                    swayAmount: swayAmount,
+                    energy: 0,
+                    tension: Math.random(),
+                    offset: Math.random() * Math.PI * 2,
+                    memory: [],
+                    knotted: false,
+                    knotPosition: [],
+                    glowing: false,
+                    lastActive: 0,
+                    lastPlayTime: 0,
+                    cooldown: 550 + Math.random() * 450,
+                    energyThreshold: 0.50 + Math.random() * 0.15,
+                    voice: null,
+                    note: null
+                });
+            }
+            
+            console.log(`Threads initialized. Count: ${threads.length}`);
+        }
+        
+        // Initialize Energy and Memory Grids
+        function initEnergyAndMemoryGrids() {
+            console.log("Initializing Energy and Memory grids...");
+            
+            visualEnergyGridWidth = Math.ceil(threadCanvas.width / energyGridResolution);
+            visualEnergyGridHeight = Math.ceil(threadCanvas.height / energyGridResolution);
+            
+            visualEnergyGrid = [];
+            nextVisualEnergyGrid = [];
+            memoryGrid = [];
+            nextMemoryGrid = [];
+            
+            for (let y = 0; y < visualEnergyGridHeight; y++) {
+                visualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                nextVisualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                memoryGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                nextMemoryGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+            }
+            
+            console.log(`Grids initialized (${visualEnergyGridWidth}x${visualEnergyGridHeight})`);
+        }
+        
+        // Initialize Pattern System
+        function initPatterns() {
+            patterns = [];
+            activePatterns = [];
+            
+            // Will be populated as the system runs
+        }
+        
+        // Initialize Glyph System
+        function initGlyphs() {
+            glyphs = [
+                { name: "tide", points: [[0,0], [0.2,0.1], [0.5,0], [0.8,0.1], [1,0]] },
+                { name: "vessel", points: [[0.3,0], [0.2,0.5], [0.3,1], [0.7,1], [0.8,0.5], [0.7,0]] },
+                { name: "knot", points: [[0.3,0.3], [0.7,0.7], [0.3,0.7], [0.7,0.3]] },
+                { name: "eye", points: [[0.3,0.5], [0.5,0.3], [0.7,0.5], [0.5,0.7]] },
+                { name: "wave", points: [[0,0.5], [0.25,0.3], [0.5,0.5], [0.75,0.7], [1,0.5]] }
+            ];
+        }
+        
+        // Initialize Audio System
+        function initAudioSystem() {
+            if (isAudioInitialized) return;
+            
+            try {
+                // Start Tone.js
+                Tone.start().then(() => {
+                    console.log("Tone.js started successfully");
+                    
+                    // Create audio context and master gain
+                    audioContext = Tone.context;
+                    masterGain = new Tone.Gain(0.3).toDestination();
+                    
+                    // Create reverb
+                    reverb = new Tone.Reverb({
+                        decay: 10, // Long reverb
+                        wet: 0.8
+                    }).connect(masterGain);
+                    
+                    // Generate reverb impulse
+                    reverb.generate().then(() => {
+                        console.log("Reverb generated");
+                        
+                        // Create ocean noise
+                        createOceanNoise();
+                        
+                        // Create thread synths
+                        createThreadSynths();
+                        
+                        isAudioInitialized = true;
+                        
+                        // Trigger some initial sounds
+                        setTimeout(() => {
+                            for (let i = 0; i < 3; i++) {
+                                const synthIndex = Math.floor(Math.random() * threadSynths.length);
+                                triggerThreadSound(threadSynths[synthIndex], 0.3);
+                            }
+                        }, 1000);
+                    });
+                }).catch(e => {
+                    console.error("Tone.js start error:", e);
+                });
+            } catch (e) {
+                console.error("Audio initialization error:", e);
+            }
+        }
+        
+        // Create Ocean Noise
+        function createOceanNoise() {
+            // Create noise source
+            oceanNoise = new Tone.Noise("pink").start();
+            
+            // Create filter
+            const noiseFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 200,
+                Q: 1.5
+            });
+            
+            // Create LFO for filter modulation
+            const lfo = new Tone.LFO({
+                frequency: 0.05,
+                min: 100,
+                max: 300
+            }).connect(noiseFilter.frequency);
+            
+            // Connect noise to filter to reverb
+            oceanNoise.connect(noiseFilter);
+            noiseFilter.connect(reverb);
+            
+            // Set initial volume
+            oceanNoise.volume.value = -30;
+            
+            // Start LFO
+            lfo.start();
+        }
+        
+        // Create Thread Synths
+        function createThreadSynths() {
+            // Create synths for thread sections
+            const sectionCount = 15;
+            const sectionSize = Math.floor(threadCount / sectionCount);
+            
+            for (let i = 0; i < sectionCount; i++) {
+                // Create synth
+                const synth = new Tone.FMSynth({
+                    harmonicity: 1.5,
+                    modulationIndex: 3.5,
+                    oscillator: {
+                        type: "sine"
+                    },
+                    envelope: {
+                        attack: 0.05,
+                        decay: 0.3,
+                        sustain: 0.1,
+                        release: 2.0
+                    },
+                    modulation: {
+                        type: "triangle"
+                    },
+                    modulationEnvelope: {
+                        attack: 0.5,
+                        decay: 0.1,
+                        sustain: 0.2,
+                        release: 2.0
+                    }
+                }).connect(reverb);
+                
+                // Set initial volume
+                synth.volume.value = -Infinity;
+                
+                // Add filter
+                const filter = new Tone.Filter({
+                    type: "lowpass",
+                    frequency: 2000,
+                    Q: 1.5
+                }).connect(reverb);
+                
+                synth.connect(filter);
+                
+                // Store synth
+                threadSynths.push({
+                    synth: synth,
+                    filter: filter,
+                    section: i,
+                    startIndex: i * sectionSize,
+                    endIndex: (i + 1) * sectionSize - 1,
+                    active: false,
+                    note: getThreadNote(i)
+                });
+            }
+        }
+        
+        // Get Thread Note
+        function getThreadNote(index) {
+            // Create a pentatonic scale across different octaves
+            const notes = [
+                55, 65.41, 73.42, 82.41, 98, // Low
+                110, 130.81, 146.83, 164.81, 196, // Mid
+                220, 261.63, 293.66, 329.63, 392 // High
+            ];
+            
+            return notes[index % notes.length];
+        }
+        
+        // Main Initialization
+        function init() {
+            console.log("Initializing Nobode...");
+            
+            try {
+                // Get canvas elements
+                oceanCanvas = document.getElementById('oceanLayer');
+                threadCanvas = document.getElementById('threadLayer');
+                patternCanvas = document.getElementById('patternLayer');
+                glyphCanvas = document.getElementById('glyphLayer');
+                interactionCanvas = document.getElementById('interactionLayer');
+                
+                if (!oceanCanvas || !threadCanvas || !patternCanvas || !glyphCanvas || !interactionCanvas) {
+                    throw new Error("Failed to get canvas elements");
+                }
+                
+                // Get video element
+                videoElement = document.getElementById('cameraFeed');
+                
+                // Get canvas contexts
+                oceanCtx = oceanCanvas.getContext('2d');
+                threadCtx = threadCanvas.getContext('2d');
+                patternCtx = patternCanvas.getContext('2d');
+                glyphCtx = glyphCanvas.getContext('2d');
+                interactionCtx = interactionCanvas.getContext('2d');
+                
+                if (!oceanCtx || !threadCtx || !patternCtx || !glyphCtx || !interactionCtx) {
+                    throw new Error("Failed to get canvas contexts");
+                }
+                
+                console.log("Canvas elements and contexts initialized");
+                
+                // Resize canvas
+                resizeCanvas();
+                
+                // Initialize systems
+                initThreads();
+                initEnergyAndMemoryGrids();
+                initPatterns();
+                initGlyphs();
+                
+                // Set up event listeners
+                setupEventListeners();
+                
+                // Start animation loop
+                lastTime = performance.now();
+                animate(lastTime);
+                
+                // Show title and instructions after a delay
+                setTimeout(() => {
+                    const title = document.getElementById('title');
+                    const instructions = document.getElementById('instructions');
+                    const interactionCue = document.getElementById('interactionCue');
+                    
+                    if (title) title.style.opacity = 0.7;
+                    if (instructions) instructions.style.opacity = 0.5;
+                    if (interactionCue) interactionCue.style.opacity = 0.6;
+                    
+                    // Show first philosophical quote
+                    updatePhilosophicalQuote();
+                    nextQuoteChangeTime = performance.now() + quoteChangeInterval;
+                }, 2000);
+                
+                // Hide loading screen
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById('loadingScreen');
+                    if (loadingScreen) {
+                        loadingScreen.style.opacity = 0;
+                        setTimeout(() => {
+                            loadingScreen.style.display = 'none';
+                        }, 3000);
+                    }
+                }, 1500);
+                
+                // Add initial disturbances to make threads visible
+                setTimeout(() => {
+                    for (let i = 0; i < 30; i++) {
+                        const x = Math.random() * threadCanvas.width;
+                        const y = Math.random() * threadCanvas.height;
+                        addDisturbance(x, y, 100, 0.3);
+                    }
+                }, 500);
+                
+                // Create initial patterns
+                for (let i = 0; i < 3; i++) {
+                    createRandomPattern();
+                }
+                
+                // Create initial glyphs
+                for (let i = 0; i < 2; i++) {
+                    createRandomGlyph();
+                }
+                
+                // Show first narrative fragment
+                setTimeout(() => {
+                    showNarrativeFragment();
+                }, 3000);
+                
+                isInitialized = true;
+                console.log("Nobode initialized successfully");
+                
+            } catch (error) {
+                console.error("Initialization error:", error);
+                // Show error message
+                const loadingScreen = document.getElementById('loadingScreen');
+                if (loadingScreen) {
+                    const loadingText = loadingScreen.querySelector('h1');
+                    if (loadingText) {
+                        loadingText.textContent = "ERROR";
+                        loadingText.style.color = "red";
+                    }
+                }
+            }
+        }
+        
+        // Set Up Event Listeners
+        function setupEventListeners() {
+            // Mouse events
+            threadCanvas.addEventListener('mousemove', handleMouseMove);
+            threadCanvas.addEventListener('mousedown', handleMouseDown);
+            threadCanvas.addEventListener('mouseup', handleMouseUp);
+            
+            // Touch events
+            threadCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            threadCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            threadCanvas.addEventListener('touchend', handleTouchEnd);
+            
+            // Key events
+            window.addEventListener('keydown', handleKeyDown);
+            
+            // Prevent right-click menu
+            threadCanvas.addEventListener('contextmenu', e => e.preventDefault());
+            
+            // Set cursor style
+            threadCanvas.style.cursor = 'grab';
+            
+            // Resize event
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(resizeCanvas, 150);
+            });
+            
+            console.log("Event listeners attached");
+        }
+        
+        // Handle Mouse Move
+        function handleMouseMove(e) {
+            if (!isPaused) {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                
+                // Add disturbance if mouse is down
+                if (isMouseDown) {
+                    addDisturbance(mouseX, mouseY, 80, 0.5);
+                    e.preventDefault();
+                }
+            }
+        }
+        
+        // Handle Mouse Down
+        function handleMouseDown(e) {
+            if (!isPaused && !cameraEnabled) {
+                isMouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                
+                // Add stronger disturbance on click
+                addDisturbance(mouseX, mouseY, 100, 1.0);
+                
+                // Change cursor
+                threadCanvas.style.cursor = 'grabbing';
+                
+                e.preventDefault();
+            }
+        }
+        
+        // Handle Mouse Up
+        function handleMouseUp(e) {
+            isMouseDown = false;
+            threadCanvas.style.cursor = 'grab';
+        }
+        
+        // Handle Touch Move
+        function handleTouchMove(e) {
+            if (!isPaused && e.touches.length > 0) {
+                const touch = e.touches[0];
+                mouseX = touch.clientX;
+                mouseY = touch.clientY;
+                
+                // Add disturbance
+                addDisturbance(mouseX, mouseY, 80, 0.5);
+                
+                e.preventDefault();
+            }
+        }
+        
+        // Handle Touch Start
+        function handleTouchStart(e) {
+            if (!isPaused && !cameraEnabled && e.touches.length > 0) {
+                const touch = e.touches[0];
+                mouseX = touch.clientX;
+                mouseY = touch.clientY;
+                
+                // Add stronger disturbance on touch
+                addDisturbance(mouseX, mouseY, 100, 1.0);
+                
+                e.preventDefault();
+            }
+        }
+        
+        // Handle Touch End
+        function handleTouchEnd(e) {
+            // Nothing specific needed here
+        }
+        
+        // Handle Key Down
+        function handleKeyDown(e) {
+            // Space key toggles camera
+            if (e.code === 'Space') {
+                if (cameraEnabled) {
+                    disableCamera();
+                } else {
+                    initCamera();
+                }
+            }
+            
+            // K key creates knot
+            if (e.code === 'KeyK') {
+                createKnot();
+            }
+            
+            // U key unweaves
+            if (e.code === 'KeyU') {
+                unweave();
+            }
+        }
+        
+        // Process Camera Feed
+        function processCameraFeed(currentTime) {
+            if (!cameraEnabled || !videoElement || videoElement.readyState < 2) return;
+            
+            // Only process every 100ms for performance
+            if (currentTime - lastCameraProcessTime < 100) return;
+            lastCameraProcessTime = currentTime;
+            
+            try {
+                // Create offscreen canvas if needed
+                if (!offscreenCanvas) {
+                    offscreenCanvas = document.createElement('canvas');
+                    offscreenCanvas.width = 320; // Lower resolution for performance
+                    offscreenCanvas.height = 240;
+                    offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+                }
+                
+                // Draw video to offscreen canvas
+                offscreenCtx.drawImage(videoElement, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                
+                // Get image data
+                const imageData = offscreenCtx.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                const data = imageData.data;
+                
+                // Compare with previous frame if available
+                if (prevImageData) {
+                    const prevData = prevImageData.data;
+                    const width = imageData.width;
+                    const height = imageData.height;
+                    const step = 6; // Process fewer pixels for performance
+                    
+                    // Detect motion by comparing pixels
+                    for (let y = 0; y < height; y += step) {
+                        for (let x = 0; x < width; x += step) {
+                            const index = (y * width + x) * 4;
+                            const rDiff = Math.abs(data[index] - prevData[index]);
+                            const gDiff = Math.abs(data[index+1] - prevData[index+1]);
+                            const bDiff = Math.abs(data[index+2] - prevData[index+2]);
+                            const diff = (rDiff + gDiff + bDiff) / 3;
+                            
+                            // If significant motion detected
+                            if (diff > 25) {
+                                // Map camera coordinates to canvas coordinates
+                                const canvasX = (x / width) * threadCanvas.width;
+                                const canvasY = (y / height) * threadCanvas.height;
+                                
+                                // Add disturbance
+                                addDisturbance(canvasX, canvasY, 60, diff / 130);
+                            }
+                        }
+                    }
+                }
+                
+                // Store current frame for next comparison
+                prevImageData = imageData;
+                
+            } catch (error) {
+                console.error("Error processing camera feed:", error);
+            }
+        }
+        
+        // Update Threads
+        function updateThreads(deltaTime) {
+            // Update each thread
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Get energy from the energy grid at thread position
+                const energy = getEnergyAt(thread.x, threadCanvas.height / 2);
+                
+                // Apply energy to thread
+                thread.energy = Math.max(0, Math.min(1, energy));
+                
+                // Decay thread energy
+                thread.energy *= 0.98;
+                
+                // Check if thread should trigger sound
+                if (soundEnabled && thread.energy > thread.energyThreshold && 
+                    performance.now() >= thread.lastPlayTime + thread.cooldown) {
+                    
+                    // Trigger sound
+                    if (thread.voice && synths[thread.voice]) {
+                        const velocity = Math.min(0.85, 0.18 + thread.energy * 0.8);
+                        try {
+                            synths[thread.voice].triggerAttack(thread.note, Tone.now() + 0.03, velocity);
+                        } catch (e) {
+                            console.warn(`Trigger ${thread.voice} error:`, e);
+                        }
+                        
+                        thread.lastPlayTime = performance.now();
+                        thread.glowing = true;
+                        
+                        setTimeout(() => {
+                            thread.glowing = false;
+                        }, 160);
+                    }
+                }
+            }
+        }
+        
+        // ==========================================
+        // ANIMATION & RENDERING
+        // ==========================================
+        
+        // Main Animation Loop
+        function animate(timestamp) {
+            if (!isInitialized) {
+                console.log("Animation loop started before initialization");
+                animationFrameId = requestAnimationFrame(animate);
+                return;
+            }
+            
+            try {
+                animationFrameId = requestAnimationFrame(animate);
+                
+                // Calculate delta time
+                const deltaTime = timestamp - lastTime;
+                lastTime = timestamp;
+                elapsedTime += deltaTime;
+                
+                // Update systems
+                updateOcean(deltaTime);
+                updateThreads(deltaTime);
+                updatePatterns(deltaTime);
+                updateGlyphs(deltaTime);
+                updateVisualEnergyGridAndMemory();
+                
+                // Perform autonomous actions
+                performAutonomousActions(deltaTime);
+                
+                // Process camera if enabled
+                if (cameraEnabled && videoElement) {
+                    processCameraFeed(timestamp);
+                }
+                
+                // Render
+                render();
+            } catch (error) {
+                console.error("Animation loop error:", error);
+                isPaused = true;
+            }
+        }
+        
+        // Update Ocean
+        function updateOcean(deltaTime) {
+            // Increment ocean time
+            oceanTime += deltaTime * 0.0002; // Very slow movement
+            
+            // Calculate tide level - slowly oscillating
+            currentTide = Math.sin(oceanTime * 0.2) * 0.3;
+            
+            // Occasionally change ocean depth
+            if (Math.random() < 0.00005) { // Less frequent changes for stability
+                oceanDepth = Math.random() * 0.5;
+            }
+            
+            // Update philosophical quote
+            if (performance.now() > nextQuoteChangeTime) {
+                updatePhilosophicalQuote();
+                nextQuoteChangeTime = performance.now() + quoteChangeInterval;
+            }
+        }
+        
+        // Update Philosophical Quote
+        function updatePhilosophicalQuote() {
+            const quoteElement = document.getElementById('quote');
+            if (!quoteElement) return;
+            
+            // Fade out
+            quoteElement.style.opacity = 0;
+            
+            // Change quote after fade out
+            setTimeout(() => {
+                currentQuoteIndex = (currentQuoteIndex + 1) % philosophicalQuotes.length;
+                quoteElement.textContent = philosophicalQuotes[currentQuoteIndex];
+                
+                // Fade in
+                quoteElement.style.opacity = 0.15;
+            }, 2000);
+        }
+        
+        // Update Threads
+        function updateThreads(deltaTime) {
+            // Update each thread
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Get energy from the energy grid at thread position
+                const energy = getEnergyAt(thread.x, threadCanvas.height / 2);
+                
+                // Apply energy to thread
+                thread.energy = Math.max(0, Math.min(1, energy));
+                
+                // Decay thread energy
+                thread.energy *= 0.98;
+                
+                // Check if thread should trigger sound
+                if (soundEnabled && thread.energy > thread.energyThreshold && 
+                    performance.now() >= thread.lastPlayTime + thread.cooldown) {
+                    
+                    // Trigger sound
+                    if (thread.voice && synths[thread.voice]) {
+                        const velocity = Math.min(0.85, 0.18 + thread.energy * 0.8);
+                        try {
+                            synths[thread.voice].triggerAttack(thread.note, Tone.now() + 0.03, velocity);
+                        } catch (e) {
+                            console.warn(`Trigger ${thread.voice} error:`, e);
+                        }
+                        
+                        thread.lastPlayTime = performance.now();
+                        thread.glowing = true;
+                        
+                        setTimeout(() => {
+                            thread.glowing = false;
+                        }, 160);
+                    }
+                }
+            }
+        }
+        
+        // Update Patterns
+        function updatePatterns(deltaTime) {
+            // Update active patterns
+            for (let i = activePatterns.length - 1; i >= 0; i--) {
+                const pattern = activePatterns[i];
+                
+                // Update pattern lifetime
+                pattern.lifetime -= deltaTime;
+                
+                // Remove pattern if lifetime is over
+                if (pattern.lifetime <= 0) {
+                    activePatterns.splice(i, 1);
+                    continue;
+                }
+                
+                // Update pattern position
+                pattern.y += pattern.speed * deltaTime;
+                
+                // Check if pattern is out of bounds
+                if (pattern.y < 0 || pattern.y > patternCanvas.height) {
+                    activePatterns.splice(i, 1);
+                    continue;
+                }
+                
+                // Apply pattern to threads
+                applyPatternToThreads(pattern);
+            }
+            
+            // Occasionally create a new pattern
+            if (Math.random() < 0.0005) {
+                createRandomPattern();
+            }
+        }
+        
+        // Update Glyphs
+        function updateGlyphs(deltaTime) {
+            // Occasionally create a new glyph
+            if (Math.random() < glyphProbability) {
+                createRandomGlyph();
+            }
+        }
+        
+        // Perform Autonomous Actions
+        function performAutonomousActions(deltaTime) {
+            // Occasionally disturb threads
+            if (Math.random() < 0.002) {
+                const x = Math.random() * threadCanvas.width;
+                const y = Math.random() * threadCanvas.height;
+                const strength = 0.1 + Math.random() * 0.3;
+                
+                addDisturbance(x, y, 50 + Math.random() * 100, strength);
+            }
+            
+            // Occasionally show narrative fragment
+            if (Math.random() < 0.0005) {
+                showNarrativeFragment();
+            }
+            
+            // Occasionally change thread tensions
+            if (Math.random() < 0.0001) {
+                for (let i = 0; i < threads.length; i++) {
+                    if (Math.random() < 0.1) {
+                        threads[i].tension = 0.8 + Math.random() * 0.4;
+                    }
+                }
+            }
+        }
+        
+        // Main Render Function
+        function render() {
+            // Clear all canvases
+            oceanCtx.clearRect(0, 0, oceanCanvas.width, oceanCanvas.height);
+            threadCtx.clearRect(0, 0, threadCanvas.width, threadCanvas.height);
+            patternCtx.clearRect(0, 0, patternCanvas.width, patternCanvas.height);
+            glyphCtx.clearRect(0, 0, glyphCanvas.width, glyphCanvas.height);
+            
+            // Render ocean
+            renderOcean();
+            
+            // Render threads
+            renderThreads();
+            
+            // Render patterns
+            renderPatterns();
+            
+            // Render glyphs
+            renderGlyphs();
+        }
+        
+        // Render Ocean
+        function renderOcean() {
+            // Create gradient for ocean depth
+            const gradient = oceanCtx.createLinearGradient(0, 0, 0, oceanCanvas.height);
+            gradient.addColorStop(0, `rgba(30, 20, 45, ${0.9 + oceanDepth * 0.1})`); // More purple-blue at top
+            gradient.addColorStop(0.5, `rgba(20, 15, 40, ${0.8 + oceanDepth * 0.2})`); // Deep blue in middle
+            gradient.addColorStop(1, `rgba(10, 8, 25, ${0.95 + oceanDepth * 0.05})`); // Almost black at bottom
+            
+            // Fill background
+            oceanCtx.fillStyle = gradient;
+            oceanCtx.fillRect(0, 0, oceanCanvas.width, oceanCanvas.height);
+            
+            // Add noise texture
+            addNoiseTexture(oceanCtx, 0.05);
+            
+            // Add subtle current lines
+            drawCurrentLines(oceanCtx);
+            
+            // Add wooden beam at top
+            drawWoodenBeam(oceanCtx);
+            
+            // Add subtle weft threads (horizontal)
+            drawWeftThreads(oceanCtx);
+        }
+        
+        // Draw Wooden Beam
+        function drawWoodenBeam(ctx) {
+            const beamHeight = 35;
+            
+            // Create gradient for beam
+            const gradient = ctx.createLinearGradient(0, 0, 0, beamHeight);
+            
+            // Dark wood color gradient
+            gradient.addColorStop(0, '#2a1f1a');
+            gradient.addColorStop(0.4, '#3a2a22');
+            gradient.addColorStop(0.6, '#2a1f1a');
+            gradient.addColorStop(1, '#1a1410');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, ctx.canvas.width, beamHeight);
+            
+            // Add wood grain texture
+            ctx.save();
+            ctx.globalAlpha = 0.15;
+            ctx.globalCompositeOperation = 'overlay';
+            
+            for (let i = 0; i < 8; i++) {
+                const y = Math.random() * beamHeight;
+                const width = Math.random() * ctx.canvas.width;
+                const height = 1 + Math.random() * 2;
+                
+                ctx.fillStyle = Math.random() > 0.5 ? '#4a3a30' : '#1a1410';
+                ctx.fillRect(Math.random() * ctx.canvas.width, y, width, height);
+            }
+            
+            // Add highlight at bottom edge
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#4a3a30';
+            ctx.fillRect(0, beamHeight - 2, ctx.canvas.width, 2);
+            
+            ctx.restore();
+        }
+        
+        // Add Noise Texture
+        function addNoiseTexture(ctx, alpha) {
+            const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                // Random noise value
+                const noise = (Math.random() - 0.5) * 15;
+                
+                // Apply noise to RGB channels
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
+                data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+        
+        // Draw Current Lines
+        function drawCurrentLines(ctx) {
+            ctx.save();
+            
+            // Set line style
+            ctx.strokeStyle = 'rgba(80, 60, 100, 0.08)'; // More purple tint
+            ctx.lineWidth = 1.5;
+            
+            // Draw 15 current lines
+            for (let i = 0; i < 15; i++) {
+                const y = i * (ctx.canvas.height / 15) + Math.sin(oceanTime + i) * 20;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                
+                // Create wavy line with gentler movements
+                for (let x = 0; x < ctx.canvas.width; x += 20) {
+                    const waveY = y + Math.sin((x * 0.005) + oceanTime * 0.5 + i) * 10; // Slower, gentler waves
+                    ctx.lineTo(x, waveY);
+                }
+                
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        // Draw Weft Threads (horizontal threads)
+        function drawWeftThreads(ctx) {
+            ctx.save();
+            
+            // Set line style for horizontal threads
+            ctx.strokeStyle = 'rgba(100, 80, 85, 0.15)';
+            ctx.lineWidth = 0.5;
+            
+            // Draw horizontal threads (weft)
+            const spacing = ctx.canvas.height / 15;
+            const beamHeight = 35;
+            
+            for (let i = 0; i < 15; i++) {
+                const y = beamHeight + i * spacing + Math.sin(i * 0.5) * 5;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                
+                // Create slightly wavy horizontal line
+                for (let x = 0; x < ctx.canvas.width; x += 20) {
+                    const waveY = y + Math.sin((x * 0.01) + oceanTime * 0.1 + i) * 2;
+                    ctx.lineTo(x, waveY);
+                }
+                
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        // Render Threads
+        function renderThreads() {
+            threadCtx.save();
+            
+            // Draw each thread
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Get energy at this thread position
+                const e = getEnergyAt(thread.x, threadCanvas.height * 0.6);
+                
+                // Calculate thread color based on energy and glowing state
+                const glowFactor = thread.glowing ? 1 : 0;
+                const l = (baseThreadLightness + e * energyToLightnessFactor + glowFactor * 8);
+                const s = thread.baseSaturation + glowFactor * 5;
+                
+                // Set thread style
+                threadCtx.strokeStyle = `hsl(${thread.baseHue}, ${s}%, ${l}%)`;
+                threadCtx.lineWidth = thread.width;
+                threadCtx.globalAlpha = 0.4 + e * 0.5 + glowFactor * 0.25;
+                
+                // Draw thread with sway
+                const time = performance.now() / 1000;
+                const swayX = Math.sin(time * thread.swaySpeed + thread.swayOffset) * thread.swayAmount;
+                
+                // Draw thread from top to bottom
+                threadCtx.beginPath();
+                threadCtx.moveTo(thread.x + swayX, 35); // Start at wooden beam
+                threadCtx.lineTo(thread.x, threadCanvas.height); // End at bottom
+                threadCtx.stroke();
+                
+                // Draw knots if any
+                if (thread.knotted) {
+                    for (let j = 0; j < thread.knotPosition.length; j++) {
+                        const knotY = thread.knotPosition[j];
+                        
+                        // Draw knot
+                        threadCtx.fillStyle = `hsl(${thread.baseHue}, ${s+5}%, ${l+5}%)`;
+                        threadCtx.beginPath();
+                        threadCtx.arc(thread.x, knotY, thread.width * 3, 0, Math.PI * 2);
+                        threadCtx.fill();
+                        
+                        // Add subtle glow around knot
+                        const gradient = threadCtx.createRadialGradient(
+                            thread.x, knotY, thread.width * 2,
+                            thread.x, knotY, thread.width * 8
+                        );
+                        gradient.addColorStop(0, `hsla(${thread.baseHue}, ${s+5}%, ${l+5}%, 0.2)`);
+                        gradient.addColorStop(1, `hsla(${thread.baseHue}, ${s+5}%, ${l+5}%, 0)`);
+                        
+                        threadCtx.fillStyle = gradient;
+                        threadCtx.beginPath();
+                        threadCtx.arc(thread.x, knotY, thread.width * 8, 0, Math.PI * 2);
+                        threadCtx.fill();
+                    }
+                }
+                
+                // Draw memory echoes occasionally
+                if (Math.random() < 0.01 && thread.memory.length > 0) {
+                    const memoryIndex = Math.floor(Math.random() * thread.memory.length);
+                    const memory = thread.memory[memoryIndex];
+                    
+                    // Draw memory echo with reduced opacity
+                    threadCtx.strokeStyle = `hsla(${thread.baseHue-10}, ${s-10}%, ${l-5}%, 0.1)`;
+                    threadCtx.lineWidth = thread.width * 0.7;
+                    
+                    const memorySwayX = Math.sin((memory.time * 0.0005) + thread.swayOffset) * thread.swayAmount;
+                    
+                    threadCtx.beginPath();
+                    threadCtx.moveTo(thread.x + memorySwayX, 35);
+                    threadCtx.lineTo(thread.x, threadCanvas.height);
+                    threadCtx.stroke();
+                }
+            }
+            
+            threadCtx.globalAlpha = 1.0;
+            threadCtx.restore();
+        }
+        
+        // Render Patterns
+        function renderPatterns() {
+            patternCtx.save();
+            
+            // Draw each active pattern
+            for (let i = 0; i < activePatterns.length; i++) {
+                const pattern = activePatterns[i];
+                
+                // Calculate opacity based on lifetime
+                const opacity = Math.min(1, pattern.lifetime / 2000) * 0.3;
+                
+                // Set pattern style
+                patternCtx.fillStyle = `rgba(${pattern.color.r}, ${pattern.color.g}, ${pattern.color.b}, ${opacity})`;
+                
+                // Draw pattern based on type
+                if (pattern.type === 'wave') {
+                    // Draw wave pattern
+                    patternCtx.beginPath();
+                    
+                    for (let x = 0; x < patternCanvas.width; x += 20) {
+                        const y = pattern.y + Math.sin((x * 0.01) + pattern.offset) * pattern.amplitude;
+                        
+                        if (x === 0) {
+                            patternCtx.moveTo(x, y);
+                        } else {
+                            patternCtx.lineTo(x, y);
+                        }
+                    }
+                    
+                    patternCtx.lineWidth = pattern.width;
+                    patternCtx.strokeStyle = `rgba(${pattern.color.r}, ${pattern.color.g}, ${pattern.color.b}, ${opacity})`;
+                    patternCtx.stroke();
+                } else if (pattern.type === 'circle') {
+                    // Draw circle pattern
+                    patternCtx.beginPath();
+                    patternCtx.arc(pattern.x, pattern.y, pattern.radius, 0, Math.PI * 2);
+                    patternCtx.fill();
+                }
+            }
+            
+            patternCtx.restore();
+        }
+        
+        // Render Glyphs
+        function renderGlyphs() {
+            glyphCtx.save();
+            
+            // Draw each glyph
+            for (let i = 0; i < glyphs.length; i++) {
+                const glyph = glyphs[i];
+                
+                if (!glyph.visible) continue;
+                
+                // Calculate opacity based on lifetime
+                const opacity = Math.min(1, glyph.lifetime / 5000) * 0.4;
+                
+                // Set glyph style
+                glyphCtx.strokeStyle = `rgba(180, 160, 140, ${opacity})`;
+                glyphCtx.lineWidth = 1;
+                
+                // Draw glyph
+                glyphCtx.beginPath();
+                
+                // Scale and position the glyph
+                const startX = glyph.x - (glyph.size / 2);
+                const startY = glyph.y - (glyph.size / 2);
+                
+                for (let j = 0; j < glyph.points.length; j++) {
+                    const point = glyph.points[j];
+                    const x = startX + point[0] * glyph.size;
+                    const y = startY + point[1] * glyph.size;
+                    
+                    if (j === 0) {
+                        glyphCtx.moveTo(x, y);
+                    } else {
+                        glyphCtx.lineTo(x, y);
+                    }
+                }
+                
+                // Close the path if it's a closed shape
+                if (glyph.closed) {
+                    glyphCtx.closePath();
+                }
+                
+                glyphCtx.stroke();
+                
+                // Update glyph lifetime
+                glyph.lifetime -= 16.7; // Roughly 60fps
+                
+                // Remove glyph if lifetime is over
+                if (glyph.lifetime <= 0) {
+                    glyph.visible = false;
+                }
+            }
+            
+            glyphCtx.restore();
+        }
+        
+        // ==========================================
+        // INTERACTION FUNCTIONS
+        // ==========================================
+        
+        // Add Disturbance to Threads
+        function addDisturbance(x, y, radius = 10, strength = 1) {
+            console.log(`Disturbance @ (${x.toFixed(0)}, ${y.toFixed(0)}) R:${radius} S:${strength.toFixed(2)}`);
+            
+            // Add energy to visual grid
+            const gridX = Math.floor(x / energyGridResolution);
+            const gridY = Math.floor(y / energyGridResolution);
+            const gridRadius = Math.max(1, Math.ceil(radius / energyGridResolution * disturbanceRadiusFactor));
+            
+            for (let dy = -gridRadius; dy <= gridRadius; dy++) {
+                for (let dx = -gridRadius; dx <= gridRadius; dx++) {
+                    const gx = gridX + dx;
+                    const gy = gridY + dy;
+                    
+                    if (visualEnergyGrid[gy]?.[gx] !== undefined) {
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist <= gridRadius) {
+                            const falloff = Math.pow(Math.max(0, 1 - dist / gridRadius), 1.7);
+                            const impact = strength * falloff * 0.95;
+                            visualEnergyGrid[gy][gx] = Math.min(1.0, visualEnergyGrid[gy][gx] + impact);
+                        }
+                    }
+                }
+            }
+            
+            // Find closest thread for direct interaction
+            const threadSpacing = threadCanvas.width / (threadCount + 1);
+            let closestIndex = -1;
+            let minDistance = Infinity;
+            
+            threads.forEach((thread, i) => {
+                const distance = Math.abs(thread.x - x);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIndex = i;
+                }
+            });
+            
+            if (closestIndex !== -1 && minDistance < threadSpacing * 1.8) {
+                const thread = threads[closestIndex];
+                thread.energy = Math.min(1.0, thread.energy + strength * 0.8);
+                thread.glowing = true;
+                thread.lastActive = elapsedTime;
+                
+                // Store in thread memory
+                if (thread.memory.length >= 5) {
+                    thread.memory.shift();
+                }
+                thread.memory.push({
+                    energy: thread.energy,
+                    time: elapsedTime
+                });
+                
+                setTimeout(() => {
+                    thread.glowing = false;
+                }, 160);
+            }
+        }
+        
+        // Create Random Pattern
+        function createRandomPattern() {
+            // Choose pattern type
+            const type = Math.random() < 0.7 ? 'wave' : 'circle';
+            
+            // Create pattern
+            const pattern = {
+                type: type,
+                x: Math.random() * patternCanvas.width,
+                y: Math.random() * patternCanvas.height,
+                speed: (Math.random() * 0.02) - 0.01, // Can move up or down
+                lifetime: 5000 + Math.random() * 10000, // 5-15 seconds
+                color: {
+                    r: 80 + Math.random() * 40,
+                    g: 30 + Math.random() * 20,
+                    b: 40 + Math.random() * 30
+                }
+            };
+            
+            // Add type-specific properties
+            if (type === 'wave') {
+                pattern.amplitude = 20 + Math.random() * 40;
+                pattern.width = 1 + Math.random() * 2;
+                pattern.offset = Math.random() * Math.PI * 2;
+            } else {
+                pattern.radius = 30 + Math.random() * 100;
+            }
+            
+            // Add to active patterns
+            activePatterns.push(pattern);
+        }
+        
+        // Apply Pattern to Threads
+        function applyPatternToThreads(pattern) {
+            // Only apply pattern occasionally
+            if (Math.random() > 0.1) return;
+            
+            // Apply pattern based on type
+            if (pattern.type === 'wave') {
+                // Apply wave pattern to threads
+                for (let i = 0; i < threads.length; i++) {
+                    const thread = threads[i];
+                    const x = thread.x;
+                    
+                    // Calculate y position on wave
+                    const waveY = pattern.y + Math.sin((x * 0.01) + pattern.offset) * pattern.amplitude;
+                    
+                    // Calculate distance to wave
+                    const distance = Math.abs(waveY - (threadCanvas.height / 2));
+                    
+                    // If thread is close to wave
+                    if (distance < 50) {
+                        // Calculate falloff based on distance
+                        const falloff = 1 - (distance / 50);
+                        
+                        // Apply disturbance to thread
+                        thread.energy += 0.05 * falloff;
+                    }
+                }
+            } else if (pattern.type === 'circle') {
+                // Apply circle pattern to threads
+                for (let i = 0; i < threads.length; i++) {
+                    const thread = threads[i];
+                    
+                    // Calculate distance to circle center
+                    const distance = Math.sqrt(Math.pow(thread.x - pattern.x, 2) + Math.pow(threadCanvas.height / 2 - pattern.y, 2));
+                    
+                    // If thread is close to circle edge
+                    if (Math.abs(distance - pattern.radius) < 20) {
+                        // Calculate falloff based on distance
+                        const falloff = 1 - (Math.abs(distance - pattern.radius) / 20);
+                        
+                        // Apply disturbance to thread
+                        thread.energy += 0.1 * falloff;
+                    }
+                }
+            }
+        }
+        
+        // Create Random Glyph
+        function createRandomGlyph() {
+            // Choose random glyph
+            const glyphIndex = Math.floor(Math.random() * glyphs.length);
+            const glyphTemplate = glyphs[glyphIndex];
+            
+            // Create glyph instance
+            const glyph = {
+                name: glyphTemplate.name,
+                points: glyphTemplate.points,
+                x: Math.random() * glyphCanvas.width,
+                y: Math.random() * glyphCanvas.height,
+                size: 50 + Math.random() * 100,
+                lifetime: 10000 + Math.random() * 20000, // 10-30 seconds
+                visible: true,
+                closed: Math.random() < 0.5
+            };
+            
+            // Add to glyphs array
+            glyphs.push(glyph);
+        }
+        
+        // Show Narrative Fragment
+        function showNarrativeFragment() {
+            // Choose random fragment
+            const fragmentIndex = Math.floor(Math.random() * narrativeFragments.length);
+            const fragmentText = narrativeFragments[fragmentIndex];
+            
+            // Create fragment element
+            const fragment = document.createElement('div');
+            fragment.className = 'text-fragment';
+            fragment.textContent = fragmentText;
+            
+            // Position fragment
+            fragment.style.left = (Math.random() * 60 + 20) + '%';
+            fragment.style.top = (Math.random() * 60 + 20) + '%';
+            
+            // Add to document
+            document.body.appendChild(fragment);
+            
+            // Show fragment
+            setTimeout(() => {
+                fragment.classList.add('visible');
+                
+                // Add disturbance around the fragment
+                const rect = fragment.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                addDisturbance(centerX, centerY, 200, 0.3);
+            }, 100);
+            
+            // Remove fragment after delay
+            setTimeout(() => {
+                fragment.classList.remove('visible');
+                setTimeout(() => {
+                    document.body.removeChild(fragment);
+                }, 3000);
+            }, 8000 + Math.random() * 4000);
+        }
+        
+        // Trigger Thread Sound
+        function triggerThreadSound(synthData, energy) {
+            if (!isAudioInitialized) return;
+            
+            // Set synth as active
+            synthData.active = true;
+            
+            // Calculate velocity based on energy
+            const velocity = 0.1 + Math.min(0.7, Math.abs(energy) * 0.5);
+            
+            // Calculate frequency based on note
+            const frequency = synthData.note;
+            
+            // Trigger synth
+            synthData.synth.triggerAttackRelease(frequency, "4n", Tone.now(), velocity);
+            
+            // Set filter frequency based on energy
+            synthData.filter.frequency.value = 500 + Math.abs(energy) * 2000;
+            
+            // Set synth as inactive after delay
+            setTimeout(() => {
+                synthData.active = false;
+            }, 500);
+        }
+        
+        // Initialize Camera
+        function initCamera() {
+            if (cameraEnabled) return;
+            
+            // Check if camera is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error("Camera not supported");
+                alert("Camera not supported by your browser.");
+                return;
+            }
+            
+            // Request camera access
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 320 },
+                    height: { ideal: 240 }
+                },
+                audio: false
+            }).then(stream => {
+                // Set video source
+                video.srcObject = stream;
+                
+                // Play video
+                video.play().then(() => {
+                    cameraEnabled = true;
+                    console.log("Camera initialized");
+                    
+                    // Update instructions
+                    document.getElementById('instructions').textContent = "Move your body to weave the threads.";
+                    document.getElementById('instructions').style.opacity = 0.7;
+                    
+                    // Add disturbance to show camera is active
+                    for (let i = 0; i < 10; i++) {
+                        setTimeout(() => {
+                            const x = Math.random() * threadCanvas.width;
+                            const y = Math.random() * threadCanvas.height;
+                            addDisturbance(x, y, 100, 0.5);
+                        }, i * 200);
+                    }
+                    
+                    // Show narrative fragment
+                    showNarrativeFragment();
+                }).catch(e => {
+                    console.error("Video play error:", e);
+                    alert("Could not start video stream.");
+                });
+            }).catch(e => {
+                console.error("Camera access error:", e);
+                alert("Could not access camera. Please allow camera access and try again.");
+            });
+        }
+        
+        // Disable Camera
+        function disableCamera() {
+            if (!cameraEnabled) return;
+            
+            // Stop all tracks
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            cameraEnabled = false;
+            prevImageData = null;
+            console.log("Camera disabled");
+            
+            // Update instructions
+            document.getElementById('instructions').textContent = "Move slowly. The loom remembers.";
+            document.getElementById('instructions').style.opacity = 0.5;
+        }
+        
+        // Create Knot
+        function createKnot() {
+            // Find thread closest to mouse
+            let closestThread = null;
+            let minDistance = Infinity;
+            
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - mouseX);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestThread = thread;
+                }
+            }
+            
+            // If thread is close enough
+            if (closestThread && minDistance < 30) {
+                // Create knot
+                closestThread.knotted = true;
+                closestThread.knotPosition.push(mouseY);
+                
+                // Sort knot positions
+                closestThread.knotPosition.sort((a, b) => a - b);
+                
+                // Trigger sound
+                if (isAudioInitialized) {
+                    // Find which synth section this thread belongs to
+                    for (let i = 0; i < threadSynths.length; i++) {
+                        const synth = threadSynths[i];
+                        const threadIndex = threads.indexOf(closestThread);
+                        
+                        if (threadIndex >= synth.startIndex && threadIndex <= synth.endIndex) {
+                            // Trigger synth
+                            triggerThreadSound(synth, 0.8);
+                            break;
+                        }
+                    }
+                }
+                
+                // Show narrative fragment
+                showNarrativeFragment();
+            }
+        }
+        
+        // Unweave
+        function unweave() {
+            // Reduce energy of all threads
+            for (let i = 0; i < threads.length; i++) {
+                threads[i].energy *= 0.5;
+            }
+            
+            // Remove some knots
+            for (let i = 0; i < threads.length; i++) {
+                if (threads[i].knotted && threads[i].knotPosition.length > 0 && Math.random() < 0.3) {
+                    threads[i].knotPosition.pop();
+                    
+                    if (threads[i].knotPosition.length === 0) {
+                        threads[i].knotted = false;
+                    }
+                }
+            }
+            
+            // Show narrative fragment
+            showNarrativeFragment();
+        }
+        
+        // Update Visual Energy Grid And Memory
+        function updateVisualEnergyGridAndMemory() {
+            const now = performance.now();
+            if (!visualEnergyGrid || !memoryGrid || visualEnergyGrid.length === 0) return;
+            
+            const pulseThisFrame = now > nextMemoryPulseTime;
+            if (pulseThisFrame) {
+                nextMemoryPulseTime = now + memoryPulseInterval * (0.7 + Math.random() * 0.6);
+            }
+            
+            for (let y = 0; y < visualEnergyGridHeight; y++) {
+                if (!visualEnergyGrid[y] || !nextVisualEnergyGrid[y] || !memoryGrid[y] || !nextMemoryGrid[y]) continue;
+                
+                for (let x = 0; x < visualEnergyGridWidth; x++) {
+                    let currentEnergy = visualEnergyGrid[y][x] || 0;
+                    let currentMemory = memoryGrid[y][x] || 0;
+                    let surroundingEnergy = 0;
+                    
+                    // Get surrounding energy
+                    surroundingEnergy += visualEnergyGrid[y-1]?.[x] || 0;
+                    surroundingEnergy += visualEnergyGrid[y+1]?.[x] || 0;
+                    surroundingEnergy += visualEnergyGrid[y]?.[x-1] || 0;
+                    surroundingEnergy += visualEnergyGrid[y]?.[x+1] || 0;
+                    
+                    // Calculate new energy and memory
+                    let newEnergy = currentEnergy * energyDecay + surroundingEnergy * (energySpread / 4);
+                    let newMemory = currentMemory * memoryDecay + currentEnergy * (1 - memoryDecay) * 0.5;
+                    
+                    // Memory pulse
+                    if (pulseThisFrame && currentMemory > 0.1) {
+                        newEnergy += currentMemory * memoryPulseStrength * (0.5 + Math.random() * 0.5);
+                    }
+                    
+                    nextVisualEnergyGrid[y][x] = Math.max(0, Math.min(1.0, newEnergy));
+                    nextMemoryGrid[y][x] = Math.max(0, Math.min(1.0, newMemory));
+                }
+            }
+            
+            // Swap grids
+            [visualEnergyGrid, nextVisualEnergyGrid] = [nextVisualEnergyGrid, visualEnergyGrid];
+            [memoryGrid, nextMemoryGrid] = [nextMemoryGrid, memoryGrid];
+        }
+        
+        // Get Energy At Position
+        function getEnergyAt(x, y) {
+            if (!visualEnergyGrid || visualEnergyGrid.length === 0) return 0;
+            
+            const gXf = x / energyGridResolution;
+            const gYf = y / energyGridResolution;
+            const gX0 = Math.floor(gXf);
+            const gY0 = Math.floor(gYf);
+            const gX1 = gX0 + 1;
+            const gY1 = gY0 + 1;
+            
+            if (gY0 < 0 || gY1 >= visualEnergyGridHeight || gX0 < 0 || gX1 >= visualEnergyGridWidth) return 0;
+            
+            const tx = gXf - gX0;
+            const ty = gYf - gY0;
+            
+            try {
+                const e00 = visualEnergyGrid[gY0]?.[gX0] || 0;
+                const e10 = visualEnergyGrid[gY0]?.[gX1] || 0;
+                const e01 = visualEnergyGrid[gY1]?.[gX0] || 0;
+                const e11 = visualEnergyGrid[gY1]?.[gX1] || 0;
+                
+                const ex0 = e00 + (e10 - e00) * tx;
+                const ex1 = e01 + (e11 - e01) * tx;
+                
+                return Math.max(0, Math.min(1.0, ex0 + (ex1 - ex0) * ty));
+            } catch (e) {
+                console.warn("Energy lookup error", e);
+                return 0;
+            }
+        }
+        
+        // Resize Canvas to Fill Window
+        function resizeCanvas() {
+            if (!oceanCanvas || !threadCanvas) {
+                console.error("Canvas elements not initialized yet");
+                return;
+            }
+            
+            const canvases = document.querySelectorAll('canvas');
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            console.log(`Resizing canvases to ${windowWidth}x${windowHeight}`);
+            
+            canvases.forEach(canvas => {
+                canvas.width = windowWidth;
+                canvas.height = windowHeight;
+            });
+            
+            // Create offscreen canvas if it doesn't exist
+            if (!offCanvas) {
+                offCanvas = document.createElement('canvas');
+                offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+            }
+            
+            // Resize offscreen canvas
+            offCanvas.width = 320; // Lower resolution for performance
+            offCanvas.height = 240;
+            
+            console.log("Canvas resize complete");
+        }
+        
+        // Start when page is loaded
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

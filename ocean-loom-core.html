@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom — Wave Reactive Textile</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', monospace;
+            color: rgba(100, 180, 255, 0.7);
+            touch-action: none;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #main-canvas {
+            z-index: 1;
+        }
+        
+        #echo-canvas {
+            z-index: 2;
+            opacity: 0.8;
+        }
+        
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 30, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            transition: transform 0.3s;
+        }
+        
+        .controls.hidden {
+            transform: translateY(150%);
+        }
+        
+        button {
+            background: rgba(20, 40, 80, 0.6);
+            color: rgba(160, 200, 255, 0.9);
+            border: 1px solid rgba(100, 180, 255, 0.5);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: rgba(40, 80, 120, 0.7);
+        }
+        
+        button.active {
+            background: rgba(60, 120, 160, 0.8);
+            box-shadow: 0 0 10px rgba(100, 180, 255, 0.4);
+        }
+        
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 5px;
+        }
+        
+        .slider-container span {
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100px;
+            height: 3px;
+            background: rgba(100, 180, 255, 0.3);
+            border-radius: 2px;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: rgba(120, 180, 255, 0.8);
+            cursor: pointer;
+        }
+        
+        #info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 10, 30, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 300px;
+            text-align: right;
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            transition: opacity 0.3s;
+        }
+        
+        #info.hidden {
+            opacity: 0;
+        }
+        
+        .toggle-ui {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 101;
+            width: 40px;
+            height: 40px;
+            background: rgba(10, 20, 30, 0.7);
+            border: 1px solid rgba(100, 180, 255, 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            color: rgba(160, 200, 255, 0.9);
+            font-size: 20px;
+        }
+        
+        /* Hidden video element for camera feed */
+        video {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="echo-canvas"></canvas>
+    </div>
+    
+    <video id="video" autoplay playsinline></video>
+    
+    <div id="controls">
+        <button id="reset-btn">Reset</button>
+        <button id="sound-btn">Enable Sound</button>
+        <button id="camera-btn">Camera Mode</button>
+        <button id="fullscreen-btn">Fullscreen</button>
+        
+        <div class="slider-container">
+            <span>Wave Speed</span>
+            <input type="range" min="0" max="100" value="50" class="slider" id="speed-slider">
+        </div>
+        
+        <div class="slider-container">
+            <span>Ocean Depth</span>
+            <input type="range" min="0" max="100" value="70" class="slider" id="decay-slider">
+        </div>
+        
+        <div class="slider-container">
+            <span>Wave Intensity</span>
+            <input type="range" min="0" max="100" value="60" class="slider" id="resonance-slider">
+        </div>
+    </div>
+    
+    <div id="info">
+        <h3>Ocean Loom</h3>
+        <p>A reactive ocean textile that responds to your movement</p>
+        <p>Click/touch to create waves or enable camera mode</p>
+    </div>
+    
+    <div class="toggle-ui">≡</div>
+    
+    <script>
+        // Canvas and context setup
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        
+        const echoCanvas = document.getElementById('echo-canvas');
+        const echoCtx = echoCanvas.getContext('2d');
+        
+        // Global state
+        let soundEnabled = false;
+        let isAudioInitialized = false;
+        let cameraEnabled = false;
+        let isPaused = false;
+        let lastTime = 0;
+        
+        // Thread system variables
+        const threadCount = 120;
+        let threads = [];
+        let threadWidth = 1.5;
+        let threadSpacing;
+        
+        // Wave and animation parameters
+        let waveTime = 0;
+        let waveSpeed = 0.02;
+        let waveFrequency = 0.015;
+        let decayRate = 0.02;
+        
+        // Slit scan history
+        const historyLength = 100;
+        let slitHistory = [];
+        let slitPosition = 0;
+        
+        // Camera and motion detection variables
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d');
+        let motionThreshold = 20;
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 80;
+        
+        // Audio variables
+        let audioContext = null;
+        let masterGain = null;
+        let reverb = null;
+        
+        // Oscillators and gain nodes
+        let oscillators = [];
+        let gainNodes = [];
+        
+        // Note frequencies (ocean-themed scale)
+        const noteFrequencies = {
+            high: [277.18, 311.13, 369.99, 415.30, 466.16],  // Ocean high frequencies
+            mid: [138.59, 155.56, 185.00, 207.65, 233.08],   // Ocean mid frequencies
+            low: [55.00, 65.41, 73.42, 82.41, 92.50]         // Ocean low frequencies (deep rumble)
+        };
+        
+        // Resize canvases to fill window
+        function resizeCanvases() {
+            mainCanvas.width = window.innerWidth;
+            mainCanvas.height = window.innerHeight;
+            
+            echoCanvas.width = window.innerWidth;
+            echoCanvas.height = window.innerHeight;
+            
+            // Also resize offscreen canvas for camera processing
+            if (offCanvas) {
+                offCanvas.width = window.innerWidth;
+                offCanvas.height = window.innerHeight;
+            }
+            
+            // Reset thread system on resize
+            initThreads();
+            
+            // Reset slit history on resize
+            initSlitHistory();
+        }
+        
+        // Initialize threads
+        function initThreads() {
+            threads = [];
+            threadSpacing = mainCanvas.width / (threadCount + 1);
+            
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    width: threadWidth,
+                    energy: 0,
+                    glowing: false,
+                    offset: Math.random() * Math.PI * 2,
+                    baseHue: 0, // Red base
+                    // Vary thread characteristics
+                    tension: 0.7 + Math.random() * 0.6,
+                    decay: 0.93 + Math.random() * 0.06,
+                    resonance: 0.2 + Math.random() * 0.3
+                });
+            }
+        }
+        
+        // Initialize slit scan history buffer
+        function initSlitHistory() {
+            slitHistory = [];
+            for (let i = 0; i < historyLength; i++) {
+                slitHistory.push(new ImageData(1, mainCanvas.height));
+            }
+        }
+        
+        // Initialize audio system with Web Audio API (ocean wave sounds)
+        function initAudio() {
+            try {
+                // Create audio context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create master gain
+                masterGain = audioContext.createGain();
+                masterGain.gain.value = 0.4; // Slightly louder for ocean sounds
+                masterGain.connect(audioContext.destination);
+                
+                // Create reverb
+                const convolver = audioContext.createConvolver();
+                
+                // Create impulse response for reverb - longer for ocean sounds
+                const impulseLength = audioContext.sampleRate * 3.5; // 3.5 seconds for longer reverb tail
+                const impulse = audioContext.createBuffer(2, impulseLength, audioContext.sampleRate);
+                
+                for (let channel = 0; channel < 2; channel++) {
+                    const impulseData = impulse.getChannelData(channel);
+                    for (let i = 0; i < impulseLength; i++) {
+                        // More natural decay for ocean sounds
+                        impulseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (impulseLength * 0.4));
+                    }
+                }
+                
+                convolver.buffer = impulse;
+                convolver.connect(masterGain);
+                
+                // Create oscillators for different voices
+                initOscillators(convolver);
+                
+                // Update UI
+                soundEnabled = true;
+                isAudioInitialized = true;
+                document.getElementById('sound-btn').textContent = "Disable Sound";
+                document.getElementById('sound-btn').classList.add('active');
+                
+            } catch (error) {
+                console.error("Error initializing audio:", error);
+            }
+        }
+        
+        // Initialize oscillators
+        function initOscillators(reverb) {
+            // Create a mix of oscillators for different frequency ranges
+            createOscillatorGroup('high', 3, reverb);
+            createOscillatorGroup('mid', 3, reverb);
+            createOscillatorGroup('low', 2, reverb);
+        }
+        
+        // Create a group of oscillators
+        function createOscillatorGroup(range, count, reverb) {
+            const frequencies = noteFrequencies[range];
+            
+            for (let i = 0; i < count; i++) {
+                // Create oscillator
+                const osc = audioContext.createOscillator();
+                
+                // Set waveform type - more noise-like for ocean sounds
+                const waveTypes = ['sine', 'triangle', 'sawtooth'];
+                osc.type = waveTypes[i % waveTypes.length];
+                
+                // Create gain node (silent initially)
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = 0;
+                
+                // Create filter for ocean sound shaping
+                const filter = audioContext.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = range === 'low' ? 400 : (range === 'mid' ? 800 : 1200);
+                filter.Q.value = 1.5;
+                
+                // Connect everything
+                osc.connect(filter);
+                filter.connect(gainNode);
+                
+                if (i % 2 === 0) {
+                    // Some with reverb
+                    gainNode.connect(reverb);
+                } else {
+                    // Some direct
+                    gainNode.connect(masterGain);
+                }
+                
+                // Start oscillator
+                osc.start();
+                
+                // Store references
+                oscillators.push({
+                    osc: osc,
+                    range: range,
+                    index: i,
+                    filter: filter
+                });
+                gainNodes.push(gainNode);
+            }
+        }
+        
+        // Add a disturbance (wave) to threads
+        function addDisturbance(x, y, radius, strength) {
+            let triggeredThreads = 0;
+            
+            // Create a gentler, more flowing disturbance pattern
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+                
+                if (distance < radius) {
+                    // Use a more gradual falloff for a softer wave effect
+                    const falloff = Math.pow(1 - distance / radius, 2); // Quadratic falloff
+                    const impact = strength * falloff * 0.7; // Reduced impact for gentler waves
+                    
+                    // Apply the energy more gradually
+                    thread.energy = Math.min(thread.energy + impact, 0.9);
+                    
+                    // If sound is enabled, trigger a note with more careful selection
+                    if (soundEnabled && isAudioInitialized && triggeredThreads < 2) {
+                        // Only trigger sound if the thread receives significant energy
+                        if (impact > 0.15) {
+                            triggerThreadSound(i, impact);
+                            triggeredThreads++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Trigger sound for a thread (ocean wave sound)
+        function triggerThreadSound(threadIndex, intensity) {
+            if (!audioContext) return;
+            
+            // Determine which voice to use based on thread position
+            const section = Math.floor(threadIndex / (threadCount / 3));
+            
+            let range;
+            switch(section) {
+                case 0: range = 'high'; break;
+                case 1: range = 'mid'; break;
+                case 2:
+                default: range = 'low'; break;
+            }
+            
+            // Find available oscillators in this range
+            const availableOscs = oscillators.filter(o => o.range === range);
+            
+            if (availableOscs.length === 0) return;
+            
+            // Pick a random oscillator from this range
+            const oscIndex = Math.floor(Math.random() * availableOscs.length);
+            const oscillator = availableOscs[oscIndex];
+            
+            // Pick a random note from this range
+            const noteIndex = Math.floor(Math.random() * noteFrequencies[range].length);
+            const frequency = noteFrequencies[range][noteIndex];
+            
+            // Set frequency with slight randomization for more natural ocean sound
+            const randomizedFreq = frequency * (0.98 + Math.random() * 0.04);
+            oscillator.osc.frequency.value = randomizedFreq;
+            
+            // Modulate filter for wave-like effect
+            if (oscillator.filter) {
+                const baseFreq = range === 'low' ? 400 : (range === 'mid' ? 800 : 1200);
+                oscillator.filter.frequency.cancelScheduledValues(audioContext.currentTime);
+                oscillator.filter.frequency.setValueAtTime(baseFreq * 0.5, audioContext.currentTime);
+                oscillator.filter.frequency.linearRampToValueAtTime(
+                    baseFreq * (1 + intensity), 
+                    audioContext.currentTime + 0.1
+                );
+                oscillator.filter.frequency.exponentialRampToValueAtTime(
+                    baseFreq * 0.7, 
+                    audioContext.currentTime + 0.8
+                );
+            }
+            
+            // Get corresponding gain node
+            const gainNode = gainNodes[oscillators.indexOf(oscillator)];
+            
+            // Apply envelope for wave-like sound
+            const now = audioContext.currentTime;
+            
+            // Attack - faster for wave crash
+            gainNode.gain.cancelScheduledValues(now);
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(intensity * 0.4, now + 0.01);
+            
+            // Decay and release - longer for ocean wave
+            gainNode.gain.exponentialRampToValueAtTime(intensity * 0.2, now + 0.2);
+            gainNode.gain.exponentialRampToValueAtTime(intensity * 0.1, now + 0.5);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+        }
+        
+        // Initialize camera
+        function initCamera() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" },
+                    audio: false
+                })
+                .then((stream) => {
+                    video.srcObject = stream;
+                    video.play();
+                    cameraEnabled = true;
+                    
+                    // Clear previous image data
+                    prevImageData = null;
+                    
+                    // Update button state
+                    document.getElementById('camera-btn').textContent = "Disable Camera";
+                    document.getElementById('camera-btn').classList.add('active');
+                    
+                    // Update instructions
+                    document.querySelector('#info p:nth-child(2)').textContent = 
+                        "Move in front of the camera to create waves";
+                })
+                .catch((err) => {
+                    console.error("Error accessing camera: ", err);
+                });
+            } else {
+                console.error("getUserMedia is not supported in your browser");
+            }
+        }
+        
+        // Disable camera
+        function disableCamera() {
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            cameraEnabled = false;
+            
+            // Update button state
+            document.getElementById('camera-btn').textContent = "Camera Mode";
+            document.getElementById('camera-btn').classList.remove('active');
+            
+            // Update instructions
+            document.querySelector('#info p:nth-child(2)').textContent = 
+                "A reactive ocean textile that responds to your movement";
+        }
+        
+        // Process camera feed for motion detection
+        function processCameraFeed(currentTime) {
+            if (!cameraEnabled || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            
+            // Limit processing frequency for performance
+            if (currentTime - lastProcessedCameraTime < cameraProcessInterval) return;
+            lastProcessedCameraTime = currentTime;
+            
+            // Draw current video frame to offscreen canvas
+            offCtx.drawImage(video, 0, 0, offCanvas.width, offCanvas.height);
+            const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+            
+            // If we have a previous frame, compute differences
+            if (prevImageData) {
+                // Set up a grid over the canvas
+                const cellSize = 30; // Larger cells for better performance
+                const gridWidth = Math.ceil(mainCanvas.width / cellSize);
+                const gridHeight = Math.ceil(mainCanvas.height / cellSize);
+                
+                // Process every Nth pixel for performance
+                const pixelStep = 5;
+                
+                // Loop through grid cells
+                for (let cy = 0; cy < gridHeight; cy++) {
+                    for (let cx = 0; cx < gridWidth; cx++) {
+                        let sumDiff = 0;
+                        let count = 0;
+                        
+                        // Sample pixels within this cell
+                        for (let y = cy * cellSize; y < (cy + 1) * cellSize; y += pixelStep) {
+                            for (let x = cx * cellSize; x < (cx + 1) * cellSize; x += pixelStep) {
+                                if (x < mainCanvas.width && y < mainCanvas.height) {
+                                    const index = (y * mainCanvas.width + x) * 4;
+                                    
+                                    // Calculate color difference between frames
+                                    const rDiff = Math.abs(imageData.data[index] - prevImageData.data[index]);
+                                    const gDiff = Math.abs(imageData.data[index + 1] - prevImageData.data[index + 1]);
+                                    const bDiff = Math.abs(imageData.data[index + 2] - prevImageData.data[index + 2]);
+                                    
+                                    // Average color difference
+                                    const diff = (rDiff + gDiff + bDiff) / 3;
+                                    sumDiff += diff;
+                                    count++;
+                                }
+                            }
+                        }
+                        
+                        // Calculate average difference for this cell
+                        if (count > 0) {
+                            const avgDiff = sumDiff / count;
+                            
+                            // If motion exceeds threshold, create a disturbance
+                            if (avgDiff > motionThreshold) {
+                                const centerX = cx * cellSize + cellSize / 2;
+                                const centerY = cy * cellSize + cellSize / 2;
+                                const strength = Math.min(1.0, avgDiff / 100);
+                                
+                                // Create a disturbance proportional to motion intensity
+                                addDisturbance(centerX, centerY, 40, strength);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Save current frame for next comparison
+            prevImageData = imageData;
+        }
+        
+        // Update thread animation state - more flowing, wave-like movement
+        function updateThreads() {
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Apply more gradual decay for longer-lasting ocean waves
+                thread.energy *= thread.decay;
+                
+                // Apply enhanced energy transfer between threads for a flowing ocean wave effect
+                if (i > 0 && i < threads.length - 1) {
+                    const leftThread = threads[i-1];
+                    const rightThread = threads[i+1];
+                    
+                    // Transfer a larger amount of energy to neighboring threads for wave propagation
+                    const transferAmount = thread.energy * 0.008 * thread.resonance;
+                    
+                    if (thread.energy > 0.05) {
+                        leftThread.energy += transferAmount;
+                        rightThread.energy += transferAmount;
+                    }
+                }
+                
+                // Reset glowing state
+                thread.glowing = false;
+            }
+        }
+        
+        // Update slit scan history - more fluid for ocean effect
+        function updateSlitScan() {
+            // Advance slit position more slowly for fluid ocean movement
+            slitPosition = (slitPosition + 0.8) % mainCanvas.width;
+            
+            // Get image data for current slit
+            const slitX = Math.floor(slitPosition);
+            const slitData = mainCtx.getImageData(slitX, 0, 1, mainCanvas.height);
+            
+            // Add to history
+            slitHistory.push(slitData);
+            
+            // Remove oldest entry if we've reached max length
+            if (slitHistory.length > historyLength) {
+                slitHistory.shift();
+            }
+            
+            // Clear echo canvas with subtle transparency to create flowing water trails
+            echoCtx.fillStyle = 'rgba(0, 5, 20, 0.1)';
+            echoCtx.fillRect(0, 0, echoCanvas.width, echoCanvas.height);
+            
+            // Draw slit history with fading effect
+            for (let i = 0; i < slitHistory.length; i++) {
+                const x = (slitX - i + mainCanvas.width) % mainCanvas.width;
+                const opacity = Math.pow(1 - (i / historyLength), 1.8) * 0.7; // Adjusted falloff for ocean-like fading
+                
+                // Draw the slit with varying opacity
+                echoCtx.globalAlpha = opacity;
+                echoCtx.putImageData(slitHistory[i], x, 0);
+            }
+            
+            // Reset global alpha
+            echoCtx.globalAlpha = 1.0;
+        }
+        
+        // Draw the main scene
+        function drawScene() {
+            // Clear the canvas with a subtle gradient background - blue ocean theme
+            const gradient = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
+            gradient.addColorStop(0, 'rgba(0, 10, 30, 1)');
+            gradient.addColorStop(1, 'rgba(0, 5, 15, 1)');
+            mainCtx.fillStyle = gradient;
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+            
+            // Draw each thread
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const x = thread.x;
+                
+                // Calculate color based on energy - blue ocean colors
+                const hue = 210 + thread.energy * 20; // Blue range
+                const lightness = 40 + thread.energy * 40;
+                const saturation = 70 + thread.energy * 30;
+                mainCtx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                mainCtx.lineWidth = thread.width;
+                
+                // Draw thread path
+                mainCtx.beginPath();
+                
+                // Use finer steps for all threads for a smoother appearance
+                const yStep = 2;
+                
+                // Draw thread line with wave distortion
+                for (let y = 0; y < mainCanvas.height; y += yStep) {
+                    // Calculate displacement based on multiple wave functions for more organic ocean movement
+                    const waveFactor1 = Math.sin(y * waveFrequency + waveTime + thread.offset) * thread.energy * 30;
+                    const waveFactor2 = Math.sin(y * waveFrequency * 0.3 + waveTime * 0.5 + thread.offset * 1.5) * thread.energy * 25;
+                    const displacement = (waveFactor1 + waveFactor2) * thread.tension;
+                    
+                    if (y === 0) {
+                        mainCtx.moveTo(x + displacement, y);
+                    } else {
+                        mainCtx.lineTo(x + displacement, y);
+                    }
+                }
+                
+                mainCtx.stroke();
+                
+                // Add subtle glow effect for active threads - blue glow
+                if (thread.energy > 0.05) {
+                    // Add soft highlights
+                    mainCtx.globalCompositeOperation = "screen";
+                    mainCtx.lineWidth = thread.width * 0.6;
+                    mainCtx.strokeStyle = `rgba(120, 180, 255, ${thread.energy * 0.4})`;
+                    mainCtx.stroke();
+                    
+                    // Add a second, wider glow for more depth
+                    if (thread.energy > 0.2) {
+                        mainCtx.lineWidth = thread.width * 1.5;
+                        mainCtx.strokeStyle = `rgba(70, 140, 240, ${thread.energy * 0.15})`;
+                        mainCtx.stroke();
+                    }
+                    
+                    // Reset blend mode
+                    mainCtx.globalCompositeOperation = "source-over";
+                }
+            }
+        }
+        
+        // Main animation loop
+        function animate(currentTime) {
+            const deltaTime = currentTime - lastTime || 0;
+            lastTime = currentTime;
+            
+            if (!isPaused) {
+                // Update wave time
+                waveTime += waveSpeed;
+                
+                // Update thread states
+                updateThreads();
+                
+                // Update slit scan effect
+                updateSlitScan();
+                
+                // Process camera input
+                processCameraFeed(currentTime);
+            }
+            
+            // Draw the scene
+            drawScene();
+            
+            // Request next frame
+            requestAnimationFrame(animate);
+        }
+        
+        // Initialize and start
+        function init() {
+            // Initialize systems
+            initThreads();
+            initSlitHistory();
+            
+            // Touch and mouse interaction
+            mainCanvas.addEventListener('mousemove', function(e) {
+                if (!cameraEnabled && e.buttons === 1) {
+                    addDisturbance(e.clientX, e.clientY, 30, 0.8);
+                }
+            });
+            
+            mainCanvas.addEventListener('mousedown', function(e) {
+                if (!cameraEnabled) {
+                    addDisturbance(e.clientX, e.clientY, 40, 1.0);
+                }
+            });
+            
+            mainCanvas.addEventListener('touchmove', function(e) {
+                if (!cameraEnabled) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addDisturbance(touch.clientX, touch.clientY, 30, 0.8);
+                }
+            });
+            
+            mainCanvas.addEventListener('touchstart', function(e) {
+                if (!cameraEnabled) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addDisturbance(touch.clientX, touch.clientY, 40, 1.0);
+                }
+            });
+            
+            // Button controls
+            document.getElementById('reset-btn').addEventListener('click', function() {
+                // Reset all thread energies
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].energy = 0;
+                }
+                
+                // Clear slit history
+                initSlitHistory();
+            });
+            
+            document.getElementById('sound-btn').addEventListener('click', async function() {
+                if (!soundEnabled) {
+                    await initAudio();
+                } else {
+                    soundEnabled = false;
+                    this.textContent = "Enable Sound";
+                    this.classList.remove('active');
+                }
+            });
+            
+            document.getElementById('camera-btn').addEventListener('click', function() {
+                if (!cameraEnabled) {
+                    initCamera();
+                } else {
+                    disableCamera();
+                }
+            });
+            
+            // Slider controls
+            document.getElementById('speed-slider').addEventListener('input', function(e) {
+                waveSpeed = 0.01 + (parseInt(e.target.value) / 100) * 0.1;
+            });
+            
+            document.getElementById('decay-slider').addEventListener('input', function(e) {
+                const decayValue = parseInt(e.target.value) / 100;
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].decay = 0.9 + decayValue * 0.09; // Range from 0.9 to 0.99
+                }
+            });
+            
+            document.getElementById('resonance-slider').addEventListener('input', function(e) {
+                // Update resonance value
+                const resonanceValue = parseInt(e.target.value) / 100;
+                for (let i = 0; i < threads.length; i++) {
+                    threads[i].resonance = 0.2 + resonanceValue * 0.3;
+                }
+            });
+            
+            // Start animation loop
+            requestAnimationFrame(animate);
+        }
+        
+        // Start when everything is loaded
+        window.addEventListener('load', function() {
+            init();
+        });
+        
+        // UI toggle behavior
+        document.querySelector('.toggle-ui').addEventListener('click', function() {
+            document.getElementById('controls').classList.toggle('hidden');
+            document.getElementById('info').classList.toggle('hidden');
+        });
+        
+        // Fullscreen button
+        document.getElementById('fullscreen-btn').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>

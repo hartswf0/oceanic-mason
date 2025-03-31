@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobode - Ocean Depths</title>
+    <style>
+        /* Base Styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background-color: #050812; /* Deeper ocean blue */
+            font-family: 'Times New Roman', serif;
+            color: rgba(255, 255, 255, 0.5);
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+        
+        /* Canvas Layer */
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Text Elements */
+        .title {
+            position: absolute;
+            top: 40px;
+            width: 100%;
+            text-align: center;
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 3s ease;
+            pointer-events: none;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 100px;
+            width: 100%;
+            text-align: center;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.5);
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 3s ease;
+            pointer-events: none;
+        }
+        
+        .quote {
+            position: absolute;
+            bottom: 60px;
+            width: 100%;
+            text-align: center;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.15);
+            font-style: italic;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 5s ease;
+            pointer-events: none;
+            padding: 0 20%;
+        }
+        
+        /* Camera styles */
+        #video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        #video {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="title" id="title">Nobode</div>
+    <div class="instructions" id="instructions">Move slowly. The loom remembers.</div>
+    <div class="quote" id="quote"></div>
+    
+    <!-- Audio elements -->
+    <audio id="lowSound" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAkJCQkJCQkJCQkJCQkJCQkJCQwMDAwMDAwMDAwMDAwMDAwMDAwMD4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+P////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAAbA04qpjAAAAAAAAAAAAAAAAAAAAAP/jOMAAAAAAAAAAAABJbmZvAAAADwAAAAMAAAGwAJCQkJCQkJCQkJCQkJCQkJCQkMDAwMDAwMDAwMDAwMDAwMDAwMDA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAAbA04qpjAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=" preload></audio>
+    <audio id="midSound" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAeAAkJCQkJCQkJCQkJCQkJCQkJCQwMDAwMDAwMDAwMDAwMDAwMDAwMD4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+P////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAP/jOMAAAAAAAAAAAABJbmZvAAAADwAAAAMAAAHgAJCQkJCQkJCQkJCQkJCQkJCQkMDAwMDAwMDAwMDAwMDAwMDAwMDA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=" preload></audio>
+    <audio id="highSound" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAeAAkJCQkJCQkJCQkJCQkJCQkJCQwMDAwMDAwMDAwMDAwMDAwMDAwMD4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+P////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAP/jOMAAAAAAAAAAAABJbmZvAAAADwAAAAMAAAHgAJCQkJCQkJCQkJCQkJCQkJCQkMDAwMDAwMDAwMDAwMDAwMDAwMDA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=" preload></audio>
+    <audio id="knotSound" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAeAAkJCQkJCQkJCQkJCQkJCQkJCQwMDAwMDAwMDAwMDAwMDAwMDAwMD4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+P////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAP/jOMAAAAAAAAAAAABJbmZvAAAADwAAAAMAAAHgAJCQkJCQkJCQkJCQkJCQkJCQkMDAwMDAwMDAwMDAwMDAwMDAwMDA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAkAAAAAAAAAAdDXcKPlAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=" preload></audio>
+
+    <!-- Camera element -->
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas to fill window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Reinitialize threads if they exist
+            if (threads.length > 0) {
+                initThreads();
+            }
+        }
+        
+        // Constants
+        const threadCount = 140;
+        const baseHue = 350; // Reddish base hue
+        
+        // State
+        let threads = [];
+        let mouseX = 0;
+        let mouseY = 0;
+        let isMouseDown = false;
+        let lastTime = 0;
+        let animationId = null;
+        let soundEnabled = false;
+        let cameraEnabled = false;
+        let prevFrameData = null;
+        let lastCameraProcessTime = 0;
+        let cameraProcessInterval = 100; // ms between camera processing
+        let motionThreshold = 15; // Threshold for detecting motion
+        
+        // Audio elements
+        let lowSound, midSound, highSound, knotSound;
+        
+        // Camera elements
+        let video, offscreenCanvas, offscreenCtx;
+        
+        // Philosophical quotes about digital sovereignty
+        const philosophicalQuotes = [
+            "Software is not a tool but an ontological force that shapes reality.",
+            "True sovereignty requires breaking from extractive computational models.",
+            "The digital is not separate from the physical; both are entangled in the same ontological fabric.",
+            "Computation as currently practiced is an extractive manipulation of spacetime.",
+            "The anti-tool erases its corporate origins and becomes a vessel for ontological rebellion.",
+            "Digital sovereignty begins when we recognize the violence inherent in current computational paradigms.",
+            "The loom is not a machine but a companion in the ritual of unweaving extractive logic.",
+            "Non-Turing models of computation may be the only path to true digital sovereignty.",
+            "The ritual of weaving is a form of resistance against the extraction of meaning.",
+            "In the space between threads lies the possibility of non-extractive computation."
+        ];
+        
+        let currentQuoteIndex = 0;
+        
+        // Initialize threads
+        function initThreads() {
+            threads = [];
+            const spacing = canvas.width / (threadCount + 1);
+            
+            for (let i = 0; i < threadCount; i++) {
+                const x = (i + 1) * spacing;
+                const swaySpeed = 0.1 + Math.random() * 0.2;
+                const swayAmount = 0.6 + Math.random() * 0.8;
+                
+                threads.push({
+                    x: x,
+                    width: 0.8 * (0.85 + Math.random() * 0.3),
+                    baseHue: baseHue + (Math.random() - 0.5) * 12,
+                    baseSaturation: 25 + Math.random() * 10,
+                    swayOffset: Math.random() * Math.PI * 2,
+                    swaySpeed: swaySpeed,
+                    swayAmount: swayAmount,
+                    energy: 0,
+                    memory: [],
+                    glowing: false,
+                    knotted: false,
+                    knotPosition: []
+                });
+            }
+        }
+        
+        // Draw wooden beam at top
+        function drawWoodenBeam() {
+            const beamHeight = 35;
+            const gradient = ctx.createLinearGradient(0, 0, 0, beamHeight);
+            
+            // Dark wood color gradient
+            gradient.addColorStop(0, '#2a1f1a');
+            gradient.addColorStop(0.4, '#3a2a22');
+            gradient.addColorStop(0.6, '#2a1f1a');
+            gradient.addColorStop(1, '#1a1410');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, beamHeight);
+            
+            // Add wood grain texture
+            ctx.save();
+            ctx.globalAlpha = 0.15;
+            ctx.globalCompositeOperation = 'overlay';
+            
+            for (let i = 0; i < 8; i++) {
+                const y = Math.random() * beamHeight;
+                const width = Math.random() * canvas.width;
+                const height = 1 + Math.random() * 2;
+                
+                ctx.fillStyle = Math.random() > 0.5 ? '#4a3a30' : '#1a1410';
+                ctx.fillRect(Math.random() * canvas.width, y, width, height);
+            }
+            
+            // Add highlight at bottom edge
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#4a3a30';
+            ctx.fillRect(0, beamHeight - 2, canvas.width, 2);
+            
+            ctx.restore();
+        }
+        
+        // Draw ocean background
+        function drawOcean(time) {
+            // Create gradient for ocean depth
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, 'rgba(30, 20, 45, 0.95)'); // More purple-blue at top
+            gradient.addColorStop(0.5, 'rgba(20, 15, 40, 0.9)'); // Deep blue in middle
+            gradient.addColorStop(1, 'rgba(10, 8, 25, 0.98)'); // Almost black at bottom
+            
+            // Fill background
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw subtle current lines
+            ctx.save();
+            ctx.strokeStyle = 'rgba(80, 60, 100, 0.08)'; // More purple tint
+            ctx.lineWidth = 1.5;
+            
+            // Draw 15 current lines
+            for (let i = 0; i < 15; i++) {
+                const y = i * (canvas.height / 15) + Math.sin(time * 0.001 + i) * 20;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                
+                // Create wavy line with gentler movements
+                for (let x = 0; x < canvas.width; x += 20) {
+                    const waveY = y + Math.sin((x * 0.005) + time * 0.0005 + i) * 10; // Slower, gentler waves
+                    ctx.lineTo(x, waveY);
+                }
+                
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+            
+            // Draw horizontal weft threads
+            ctx.save();
+            ctx.strokeStyle = 'rgba(100, 80, 85, 0.15)';
+            ctx.lineWidth = 0.5;
+            
+            const spacing = canvas.height / 15;
+            const beamHeight = 35;
+            
+            for (let i = 0; i < 15; i++) {
+                const y = beamHeight + i * spacing + Math.sin(i * 0.5) * 5;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                
+                for (let x = 0; x < canvas.width; x += 20) {
+                    const waveY = y + Math.sin((x * 0.01) + time * 0.0001 + i) * 2;
+                    ctx.lineTo(x, waveY);
+                }
+                
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        // Draw threads
+        function drawThreads(time) {
+            ctx.save();
+            
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Calculate thread color based on energy and glowing state
+                const glowFactor = thread.glowing ? 1 : 0;
+                const l = (10 + thread.energy * 5 + glowFactor * 8);
+                const s = thread.baseSaturation + glowFactor * 5;
+                
+                // Set thread style
+                ctx.strokeStyle = `hsl(${thread.baseHue}, ${s}%, ${l}%)`;
+                ctx.lineWidth = thread.width;
+                ctx.globalAlpha = 0.4 + thread.energy * 0.5 + glowFactor * 0.25;
+                
+                // Draw thread with sway
+                const swayX = Math.sin(time * 0.001 * thread.swaySpeed + thread.swayOffset) * thread.swayAmount;
+                
+                // Draw thread from top to bottom
+                ctx.beginPath();
+                ctx.moveTo(thread.x + swayX, 35); // Start at wooden beam
+                ctx.lineTo(thread.x, canvas.height); // End at bottom
+                ctx.stroke();
+                
+                // Draw knots if any
+                if (thread.knotted && thread.knotPosition.length > 0) {
+                    for (let j = 0; j < thread.knotPosition.length; j++) {
+                        const knotY = thread.knotPosition[j];
+                        
+                        // Draw knot
+                        ctx.fillStyle = `hsl(${thread.baseHue}, ${s+5}%, ${l+5}%)`;
+                        ctx.beginPath();
+                        ctx.arc(thread.x, knotY, thread.width * 3, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Add subtle glow around knot
+                        const gradient = ctx.createRadialGradient(
+                            thread.x, knotY, thread.width * 2,
+                            thread.x, knotY, thread.width * 8
+                        );
+                        gradient.addColorStop(0, `hsla(${thread.baseHue}, ${s+5}%, ${l+5}%, 0.2)`);
+                        gradient.addColorStop(1, `hsla(${thread.baseHue}, ${s+5}%, ${l+5}%, 0)`);
+                        
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(thread.x, knotY, thread.width * 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                
+                // Draw memory echoes occasionally
+                if (Math.random() < 0.01 && thread.memory.length > 0) {
+                    const memoryIndex = Math.floor(Math.random() * thread.memory.length);
+                    const memory = thread.memory[memoryIndex];
+                    
+                    // Draw memory echo with reduced opacity
+                    ctx.strokeStyle = `hsla(${thread.baseHue-10}, ${s-10}%, ${l-5}%, 0.1)`;
+                    ctx.lineWidth = thread.width * 0.7;
+                    
+                    const memorySwayX = Math.sin((memory.time * 0.0005) + thread.swayOffset) * thread.swayAmount;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(thread.x + memorySwayX, 35);
+                    ctx.lineTo(thread.x, canvas.height);
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        }
+        
+        // Add disturbance to threads
+        function addDisturbance(x, y, radius = 100, strength = 1.0) {
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+                
+                if (distance < radius) {
+                    const falloff = 1 - (distance / radius);
+                    thread.energy = Math.min(1.0, thread.energy + strength * falloff * 0.8);
+                    thread.glowing = true;
+                    
+                    // Store in thread memory
+                    if (thread.memory.length >= 5) {
+                        thread.memory.shift();
+                    }
+                    thread.memory.push({
+                        energy: thread.energy,
+                        time: performance.now()
+                    });
+                    
+                    // Play sound based on thread position
+                    if (soundEnabled && Math.random() < 0.3) {
+                        playThreadSound(thread, strength);
+                    }
+                    
+                    setTimeout(() => {
+                        thread.glowing = false;
+                    }, 160);
+                }
+            }
+        }
+        
+        // Play thread sound
+        function playThreadSound(thread, strength) {
+            try {
+                // Determine which sound to play based on thread position
+                const threadIndex = threads.indexOf(thread);
+                const section = Math.floor(threadIndex / (threadCount / 3));
+                
+                let sound;
+                if (section === 0) {
+                    sound = highSound;
+                } else if (section === 1) {
+                    sound = midSound;
+                } else {
+                    sound = lowSound;
+                }
+                
+                // Set volume based on strength
+                sound.volume = Math.min(0.7, 0.2 + strength * 0.5);
+                
+                // Reset and play
+                sound.currentTime = 0;
+                sound.play().catch(e => {
+                    // Silently fail - this is expected on some browsers before user interaction
+                    console.log("Sound play failed, this is normal before user interaction");
+                });
+            } catch (e) {
+                console.log("Error playing sound:", e);
+            }
+        }
+        
+        // Update threads
+        function updateThreads(deltaTime) {
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                
+                // Decay thread energy
+                thread.energy *= 0.98;
+            }
+        }
+        
+        // Update philosophical quote
+        function updatePhilosophicalQuote() {
+            const quoteElement = document.getElementById('quote');
+            if (!quoteElement) return;
+            
+            // Fade out
+            quoteElement.style.opacity = 0;
+            
+            // Change quote after fade out
+            setTimeout(() => {
+                currentQuoteIndex = (currentQuoteIndex + 1) % philosophicalQuotes.length;
+                quoteElement.textContent = philosophicalQuotes[currentQuoteIndex];
+                
+                // Fade in
+                quoteElement.style.opacity = 0.15;
+            }, 2000);
+        }
+        
+        // Create knot
+        function createKnot() {
+            // Find thread with highest energy
+            let maxEnergyThread = null;
+            let maxEnergy = 0;
+            
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                if (thread.energy > maxEnergy) {
+                    maxEnergy = thread.energy;
+                    maxEnergyThread = thread;
+                }
+            }
+            
+            // If no thread has energy, create knot at random position
+            if (!maxEnergyThread || maxEnergy < 0.1) {
+                const randomIndex = Math.floor(Math.random() * threads.length);
+                maxEnergyThread = threads[randomIndex];
+            }
+            
+            // Create knot
+            if (maxEnergyThread) {
+                maxEnergyThread.knotted = true;
+                
+                // Random position along thread
+                const knotY = 100 + Math.random() * (canvas.height - 200);
+                
+                // Add to knot positions
+                maxEnergyThread.knotPosition.push(knotY);
+                
+                // Add energy to thread
+                maxEnergyThread.energy = Math.min(1.0, maxEnergyThread.energy + 0.5);
+                maxEnergyThread.glowing = true;
+                
+                setTimeout(() => {
+                    maxEnergyThread.glowing = false;
+                }, 300);
+                
+                // Add disturbance around knot
+                addDisturbance(maxEnergyThread.x, knotY, 150, 0.3);
+                
+                // Play knot sound
+                if (soundEnabled) {
+                    try {
+                        knotSound.volume = 0.5;
+                        knotSound.currentTime = 0;
+                        knotSound.play().catch(e => console.log("Knot sound play failed"));
+                    } catch (e) {
+                        console.log("Error playing knot sound:", e);
+                    }
+                }
+                
+                console.log("Knot created");
+            }
+        }
+        
+        // Unweave - remove knots
+        function unweave() {
+            let knotsRemoved = false;
+            
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                if (thread.knotted && thread.knotPosition.length > 0) {
+                    // Remove last knot
+                    thread.knotPosition.pop();
+                    
+                    // If no more knots, set knotted to false
+                    if (thread.knotPosition.length === 0) {
+                        thread.knotted = false;
+                    }
+                    
+                    // Add energy to thread
+                    thread.energy = Math.min(1.0, thread.energy + 0.3);
+                    thread.glowing = true;
+                    
+                    setTimeout(() => {
+                        thread.glowing = false;
+                    }, 300);
+                    
+                    knotsRemoved = true;
+                    break;
+                }
+            }
+            
+            if (knotsRemoved) {
+                console.log("Knot removed");
+            }
+        }
+        
+        // Initialize camera
+        function initCamera() {
+            console.log("Initializing camera...");
+            
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error("Camera API not supported");
+                return;
+            }
+            
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 320 },
+                    height: { ideal: 240 }
+                },
+                audio: false
+            })
+            .then(stream => {
+                video.srcObject = stream;
+                cameraEnabled = true;
+                console.log("Camera enabled");
+                
+                // Update instructions
+                document.getElementById('instructions').textContent = "Move or wave to interact. Press K for knots, U to unweave.";
+                document.getElementById('instructions').style.opacity = 0.7;
+            })
+            .catch(err => {
+                console.error("Camera error:", err);
+            });
+        }
+        
+        // Process camera feed for motion detection
+        function processCameraFeed(currentTime) {
+            if (!cameraEnabled || !video || video.paused || video.ended) {
+                return;
+            }
+            
+            // Only process every X milliseconds
+            if (currentTime - lastCameraProcessTime < cameraProcessInterval) {
+                return;
+            }
+            
+            lastCameraProcessTime = currentTime;
+            
+            try {
+                // Draw current frame to offscreen canvas
+                offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                
+                // Get pixel data
+                const currentFrameData = offscreenCtx.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                
+                // If we have a previous frame, compare them
+                if (prevFrameData) {
+                    const current = currentFrameData.data;
+                    const prev = prevFrameData.data;
+                    const width = offscreenCanvas.width;
+                    const height = offscreenCanvas.height;
+                    
+                    // Sample pixels at intervals for performance
+                    const sampleStep = 8;
+                    
+                    for (let y = 0; y < height; y += sampleStep) {
+                        for (let x = 0; x < width; x += sampleStep) {
+                            const i = (y * width + x) * 4;
+                            
+                            // Calculate difference between frames
+                            const rDiff = Math.abs(current[i] - prev[i]);
+                            const gDiff = Math.abs(current[i + 1] - prev[i + 1]);
+                            const bDiff = Math.abs(current[i + 2] - prev[i + 2]);
+                            
+                            // Average difference
+                            const diff = (rDiff + gDiff + bDiff) / 3;
+                            
+                            // If difference exceeds threshold, add disturbance
+                            if (diff > motionThreshold) {
+                                // Map camera coordinates to canvas coordinates
+                                const canvasX = (x / width) * canvas.width;
+                                const canvasY = (y / height) * canvas.height;
+                                
+                                // Add disturbance with strength proportional to difference
+                                const strength = Math.min(1.0, diff / 100);
+                                addDisturbance(canvasX, canvasY, 80, strength);
+                            }
+                        }
+                    }
+                }
+                
+                // Store current frame for next comparison
+                prevFrameData = currentFrameData;
+                
+            } catch (error) {
+                console.error("Error processing camera feed:", error);
+            }
+        }
+        
+        // Animation loop
+        function animate(timestamp) {
+            try {
+                // Request next frame
+                animationId = requestAnimationFrame(animate);
+                
+                // Calculate delta time
+                const deltaTime = timestamp - lastTime;
+                lastTime = timestamp;
+                
+                // Update threads
+                updateThreads(deltaTime);
+                
+                // Process camera feed
+                processCameraFeed(timestamp);
+                
+                // Draw layers
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawOcean(timestamp);
+                drawWoodenBeam();
+                drawThreads(timestamp);
+            } catch (error) {
+                console.error("Animation loop error:", error);
+                cancelAnimationFrame(animationId);
+            }
+        }
+        
+        // Initialize
+        function init() {
+            console.log("===== Initializing Nobode Depths Loom [Enhanced V3] =====");
+            try {
+                // Initialize audio elements
+                lowSound = document.getElementById('lowSound');
+                midSound = document.getElementById('midSound');
+                highSound = document.getElementById('highSound');
+                knotSound = document.getElementById('knotSound');
+                
+                // Initialize camera elements
+                video = document.getElementById('video');
+                
+                // Create offscreen canvas for camera processing
+                offscreenCanvas = document.createElement('canvas');
+                offscreenCanvas.width = 320;  // Lower resolution for performance
+                offscreenCanvas.height = 240;
+                offscreenCtx = offscreenCanvas.getContext('2d', {willReadFrequently: true});
+                
+                // Enable sound on first user interaction
+                document.addEventListener('click', function enableSound() {
+                    soundEnabled = true;
+                    document.removeEventListener('click', enableSound);
+                    console.log("Sound enabled");
+                    
+                    // Also try to enable camera on first interaction
+                    initCamera();
+                });
+                
+                // Resize canvas
+                resizeCanvas();
+                
+                // Initialize threads
+                initThreads();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                // Start animation loop
+                lastTime = performance.now();
+                animationId = requestAnimationFrame(animate);
+                
+                // Show title and instructions after a delay
+                setTimeout(() => {
+                    document.getElementById('title').style.opacity = 0.7;
+                    document.getElementById('instructions').style.opacity = 0.5;
+                    
+                    // Show first philosophical quote
+                    document.getElementById('quote').textContent = philosophicalQuotes[0];
+                    document.getElementById('quote').style.opacity = 0.15;
+                    
+                    // Change quote periodically
+                    setInterval(updatePhilosophicalQuote, 30000);
+                }, 2000);
+                
+                // Add initial disturbances to make threads visible
+                setTimeout(() => {
+                    for (let i = 0; i < 20; i++) {
+                        const x = Math.random() * canvas.width;
+                        const y = Math.random() * canvas.height;
+                        addDisturbance(x, y, 100, 0.3);
+                    }
+                }, 500);
+                
+                console.log("Initialization complete. Animation loop started.");
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                alert(`Init Error: ${error.message}`);
+            }
+        }
+        
+        // Event listeners
+        function setupEventListeners() {
+            // Mouse events
+            canvas.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                
+                if (isMouseDown) {
+                    addDisturbance(mouseX, mouseY, 80, 0.5);
+                }
+            });
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                
+                addDisturbance(mouseX, mouseY, 100, 1.0);
+                canvas.style.cursor = 'grabbing';
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isMouseDown = false;
+                canvas.style.cursor = 'grab';
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+                canvas.style.cursor = 'grab';
+            });
+            
+            // Touch events
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    mouseX = touch.clientX;
+                    mouseY = touch.clientY;
+                    
+                    addDisturbance(mouseX, mouseY, 80, 0.5);
+                }
+            }, { passive: false });
+            
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length > 0) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    mouseX = touch.clientX;
+                    mouseY = touch.clientY;
+                    
+                    addDisturbance(mouseX, mouseY, 100, 1.0);
+                }
+            }, { passive: false });
+            
+            // Key events
+            window.addEventListener('keydown', (e) => {
+                // K key creates knot
+                if (e.key === 'k' || e.key === 'K') {
+                    createKnot();
+                }
+                
+                // U key unweaves
+                if (e.key === 'u' || e.key === 'U') {
+                    unweave();
+                }
+            });
+            
+            // Resize event
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Set cursor style
+            canvas.style.cursor = 'grab';
+        }
+        
+        // Start when page is loaded
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobode - Ocean Depths Loom [Enhanced Visuals - Fixed]</title>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <!-- Tone.js will be loaded dynamically -->
+    <style>
+        :root {
+            /* Tuned for Enhanced Ocean Depth V2 */
+            --bg-color-top: #01030f; /* Deeper blue top */
+            --bg-color-bottom: #0d0412; /* Deeper purple bottom */
+            --text-color: rgba(160, 180, 205, 0.7); /* Cooler text */
+            --control-bg: rgba(12, 18, 40, 0.9); /* Darker blueish */
+            --control-border: rgba(70, 90, 140, 0.45);
+            --button-bg: rgba(45, 60, 100, 0.8);
+            --button-hover-bg: rgba(60, 75, 120, 0.9);
+            --button-active-border: rgba(110, 140, 190, 0.7);
+            --slider-track: rgba(70, 90, 140, 0.4);
+            --slider-thumb: rgba(110, 140, 190, 0.85);
+            --info-opacity: 0.45;
+            --thread-color-base-hsl: 350, 55%, 18%; /* Wine-Red loom (H, S, L) - slightly more saturation */
+            --thread-active-l-boost: 12%;
+            --thread-glow-color: hsla(355, 65%, 70%, 0.5); /* Brighter glow */
+            --overlay-color-rgb-base: 150, 180, 200; /* Base seafoam/mist RGB */
+            --overlay-color-rgb-high: 210, 230, 240; /* Whiter highlights */
+            --overlay-blend-mode: screen;
+            --overlay-opacity: 0.85;
+            --border-color: #302824; /* Darker, less red wood */
+            --border-highlight: rgba(75, 65, 55, 0.5);
+            --border-shadow: rgba(5, 2, 2, 0.35);
+            --border-height: 30px;
+            --vignette-color: rgba(0, 0, 8, 0.3); /* Darker vignette */
+            --particle-color: rgba(190, 210, 230, 0.6); /* Particle base color+alpha */
+        }
+        /* Base styles & container */
+        html, body { margin:0; padding:0; overflow:hidden; height: 100%; width: 100%; }
+        body { background-color: var(--bg-color-bottom); display:flex; font-family:'Courier New', monospace; color: var(--text-color); }
+        .container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+        #bg-canvas { z-index: 0; pointer-events: none; background-color: transparent; }
+        #main-canvas { z-index: 1; pointer-events: auto; background-color: transparent; }
+        #wave-canvas { z-index: 2; opacity: var(--overlay-opacity); mix-blend-mode: var(--overlay-blend-mode); pointer-events: none; background-color: transparent; }
+        #particle-canvas { z-index: 3; pointer-events: none; background-color: transparent; }
+
+        /* UI Styles - Added new sliders */
+        .controls { position: absolute; bottom: 15px; left: 15px; z-index: 10; background: var(--control-bg); padding: 10px 15px; border-radius: 4px; font-size: 11px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; transition: transform .35s ease-out, opacity .35s ease-out; border: 1px solid var(--control-border); backdrop-filter: blur(4px); max-width: 90%; /* Prevent overflow on small screens */ }
+        .controls.hidden { transform: translateY(100%) translateY(15px); opacity: 0; pointer-events: none; }
+        .controls button { background: var(--button-bg); color: inherit; border: 1px solid var(--control-border); padding: 5px 9px; margin: 0; cursor: pointer; border-radius: 3px; transition: background-color 0.2s, border-color 0.2s; font-size: inherit; }
+        .controls button:hover { background: var(--button-hover-bg); border-color: rgba(80, 100, 150, 0.6); }
+        .voice-button { opacity: .5; }
+        .voice-button.active { opacity: 1; border-color: var(--button-active-border); background-color: rgba(60, 80, 120, 0.85); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; gap: 3px; margin: 0 5px; }
+        .slider-container span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .slider { appearance: none; -webkit-appearance: none; width: 75px; height: 3px; background: var(--slider-track); border-radius: 1.5px; cursor: pointer; padding: 5px 0; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; }
+        .slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; border: none; }
+        /* Rest of UI styles (title, instructions, toggles) same as before */
+        .title{position:absolute;top:var(--border-height);margin-top:10px;left:15px;font-size:14px;opacity:var(--info-opacity);z-index:10;transition:opacity .3s ease;pointer-events:none;font-weight:400;letter-spacing:1px;}
+        .instructions{position:absolute;bottom:15px;right:15px;font-size:11px;opacity:var(--info-opacity);z-index:10;text-align:right;transition:opacity .3s ease;max-width:220px;pointer-events:none;line-height:1.4;}
+        .title.hidden,.instructions.hidden{opacity:0;}
+        .toggle-ui,.fullscreen-btn{position:absolute;top:8px;z-index:20;background:var(--button-bg);border:1px solid var(--control-border);color:inherit;opacity:.8;width:28px;height:28px;display:flex;justify-content:center;align-items:center;cursor:pointer;border-radius:50%;font-size:16px;transition:background .3s,opacity .3s;}
+        .toggle-ui{right:15px;}
+        .fullscreen-btn{right:53px;}
+        .toggle-ui:hover,.fullscreen-btn:hover{background:var(--button-hover-bg);opacity:1;}
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="bg-canvas"></canvas>
+        <canvas id="main-canvas"></canvas>
+        <canvas id="wave-canvas"></canvas>
+        <canvas id="particle-canvas"></canvas>
+        <video id="video" autoplay playsinline muted></video>
+
+        <div class="title hidden">Nobode - Depths</div>
+        <div class="instructions hidden">Loading Ritual...</div>
+
+        <div class="controls hidden">
+            <button id="soundBtn" title="Toggle Audio Output">Enable Sound</button>
+            <button id="pauseBtn" title="Pause/Resume Simulation">Pause</button>
+            <button id="cameraBtn" title="Toggle Camera Input">Camera Off</button>
+            <br>
+            <button class="voice-button active" data-voice="high" title="Toggle High Voice">High</button>
+            <button class="voice-button active" data-voice="mid" title="Toggle Mid Voice">Mid</button>
+            <button class="voice-button active" data-voice="low" title="Toggle Low Voice">Low</button>
+            <button class="voice-button active" data-voice="drone" title="Toggle Drone">Drone</button>
+            <button class="voice-button active" data-voice="memory" title="Toggle Echoes">Echoes</button>
+             <!-- Core Sliders -->
+             <div class="slider-container"><span title="Overall animation speed">Flow</span><input type="range" min="0" max="100" value="15" class="slider" id="speedSlider"></div>
+             <div class="slider-container"><span title="Energy/visual persistence">Persistence</span><input type="range" min="0" max="100" value="90" class="slider" id="decaySlider"></div>
+             <div class="slider-container"><span title="Interaction impact size">Impact</span><input type="range" min="0" max="100" value="35" class="slider" id="disturbanceSlider"></div>
+             <!-- Audio Slider -->
+            <div class="slider-container"><span title="Reverb amount">Resonance</span><input type="range" min="0" max="100" value="70" class="slider" id="reverbSlider"></div>
+             <!-- Visual Tuning Sliders -->
+             <div class="slider-container"><span title="Overlay noise complexity/mix">Texture</span><input type="range" min="0" max="100" value="60" class="slider" id="textureSlider"></div>
+             <div class="slider-container"><span title="Overlay visual contrast/edge">Sharpness</span><input type="range" min="0" max="100" value="40" class="slider" id="sharpnessSlider"></div>
+             <div class="slider-container"><span title="Thread fade with depth">Depth Fog</span><input type="range" min="0" max="100" value="30" class="slider" id="depthSlider"></div>
+             <div class="slider-container"><span title="Density of 'marine snow'">Particles</span><input type="range" min="0" max="100" value="50" class="slider" id="particleSlider"></div>
+        </div>
+        <button class="toggle-ui" title="Toggle Controls Panel">::</button>
+        <button class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+    </div>
+
+    <script type="module">
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // --- Constants & State ---
+        const LOG_LEVEL = { DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+        const currentLogLevel = LOG_LEVEL.INFO;
+        const threadCount = 130;
+        const threadWidth = 0.7;
+        const energyGridResolution = 30;
+        const memoryPulseInterval = 22000;
+        const memoryPulseStrength = 0.06;
+        const soundCheckFrequency = 2;
+        const cameraProcessInterval = 120;
+        const motionThreshold = 30;
+        let MAX_PARTICLES = 150; // Max capacity
+
+        // ADDED BACK THE MISSING CONSTANT:
+        const energyToLightnessFactor = 5;
+
+        // Elements & Contexts
+        let mainCanvas, mainCtx, waveCanvas, waveCtx, bgCanvas, bgCtx, particleCanvas, particleCtx, videoElement, offCanvas, offCtx;
+        let controlsPanel, titleElement, instructionsElement, uiToggleButton, fullscreenButton, cameraBtn;
+
+        // Core State
+        let isPaused = false, lastTime = 0, animationFrameId = null, frameCounter = 0;
+        let threads = [], threadSpacing = 0;
+        let visualEnergyGrid = [], nextVisualEnergyGrid = [], memoryGrid = [], nextMemoryGrid = [];
+        let visualEnergyGridWidth = 0, visualEnergyGridHeight = 0;
+        let waveTime = Math.random() * 1000;
+        // --- Tunable Parameters (with defaults) ---
+        let noiseSpeed = 0.004, noiseScale = 0.0055, noiseScaleFine = 0.018; // Base + Fine scale
+        let noiseTextureMix = 0.6; // Blend factor for noise octaves
+        let baseDensity = 0.04, energyToDensityFactor = 4.5;
+        let energyDecay = 0.985, energySpread = 0.028;
+        let disturbanceRadiusFactor = 0.4;
+        let memoryDecay = 0.9985, nextMemoryPulseTime = 0;
+        let overlaySharpness = 1.6; // Power for alpha curve
+        let depthFogAmount = 0.3; // Max alpha reduction factor for threads
+        let particleDensity = 0.5; // Factor controlling active particle count (0 to 1)
+        // --- End Tunable Parameters ---
+        let noise2D_base, noise2D_fine, noise2D_bg; // Separate noise instances
+        let particles = [];
+
+        // Audio State (mostly unchanged)
+        let soundEnabled = false, isAudioInitialized = false, audioInitPromise = null;
+        let Tone = window.Tone, reverb = null, delay = null, masterLimiter = null;
+        let synths = { high: null, mid: null, low: null };
+        let drone = { noise: null, filter: null, gain: null, lfo: null };
+        let memoryPlayer = null;
+        let voiceStates = { high: true, mid: true, low: true, drone: true, memory: true };
+        const scales = { high: ['C5','Eb5','G5','Bb5','C6','Eb6'], mid: ['C4','Eb4','G4','Bb4','C5','Eb5'], low: ['C3','Eb3','G3','Bb3','C4','Eb4'] };
+        let soundTriggerCounter = 0;
+
+        // Camera State
+        let cameraEnabled = false, prevImageData = null, lastProcessedCameraTime = 0;
+
+        // --- Logging ---
+        const log = (level, prefix, ...args) => { if (level >= currentLogLevel) { const s=level===LOG_LEVEL.ERROR?'color:red;font-weight:bold;':level===LOG_LEVEL.WARN?'color:orange;':''; console.log(`%c[${prefix}]`,s,...args);}};
+
+        // --- Particle Class --- (Added twinkle)
+        class Particle {
+             constructor(w, h) { this.w=w;this.h=h;this.reset();}
+             reset(){ this.x=Math.random()*this.w;this.y=Math.random()*this.h;this.z=Math.random();this.size=.4+this.z*.8;this.baseAlpha=.05+this.z*.2;this.alpha=this.baseAlpha;this.speed=(.04+this.z*.12)*(.6+Math.random()*.8);this.twinkleSpeed=Math.random()*0.1+0.05;this.twinklePhase=Math.random()*Math.PI*2;}
+             update(dt, nT){ this.y-=this.speed*dt*30;const nX=noise2D_fine(this.x*.01,this.y*.01+nT*.6)*.6;this.x+=nX*dt*20;this.twinklePhase+=this.twinkleSpeed;this.alpha=this.baseAlpha*(.7+.3*Math.sin(this.twinklePhase));if(this.y<-this.size)this.y=this.h+this.size;if(this.x<-this.size)this.x=this.w+this.size;if(this.x>this.w+this.size)this.x=-this.size;}
+             draw(ctx){ ctx.fillStyle=`rgba(190, 210, 230, ${this.alpha})`;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();}
+         }
+
+        // --- Initialization Functions ---
+        function setupDOMReferences() { /* Same */ log(LOG_LEVEL.DEBUG,'INIT',"Setting up DOM refs...");mainCanvas=document.getElementById('main-canvas');waveCanvas=document.getElementById('wave-canvas');bgCanvas=document.getElementById('bg-canvas');particleCanvas=document.getElementById('particle-canvas');videoElement=document.getElementById('video');controlsPanel=document.querySelector('.controls');titleElement=document.querySelector('.title');instructionsElement=document.querySelector('.instructions');uiToggleButton=document.querySelector('.toggle-ui');fullscreenButton=document.querySelector('.fullscreen-btn');cameraBtn=document.getElementById('cameraBtn');if(!mainCanvas||!waveCanvas||!bgCanvas||!particleCanvas||!videoElement||!controlsPanel)throw new Error("Essential DOM elements missing!");mainCtx=mainCanvas.getContext('2d',{alpha:!0});waveCtx=waveCanvas.getContext('2d');bgCtx=bgCanvas.getContext('2d',{alpha:!1});particleCtx=particleCanvas.getContext('2d');offCanvas=document.createElement('canvas');offCtx=offCanvas.getContext('2d',{willReadFrequently:!0});if(!mainCtx||!waveCtx||!bgCtx||!particleCtx||!offCtx)throw new Error("Canvas context failed!");log(LOG_LEVEL.DEBUG,'INIT',"DOM refs ready.");}
+        function setInstructions(text) { if (instructionsElement) instructionsElement.textContent = text; }
+        function initThreads() { /* Same */ log(LOG_LEVEL.DEBUG,'VISUAL',`Init ${threadCount} threads...`);threads=[];if(!mainCanvas||mainCanvas.width<=0)return;threadSpacing=mainCanvas.width/(threadCount+1);const bH=350;for(let i=0;i<threadCount;i++){const sS=.07+Math.random()*.1,sA=.4+Math.random()*.5;threads.push({x:(i+1)*threadSpacing,width:threadWidth*(.9+Math.random()*.2),baseHue:bH+(Math.random()-.5)*10,baseSaturation:45+Math.random()*10,swayOffset:Math.random()*Math.PI*2,swaySpeed:sS,swayAmount:sA,lastPlayTime:0,cooldown:600+Math.random()*400,energyThreshold:.48+Math.random()*.12,glowing:!1,voice:null,note:null});} if(isAudioInitialized)assignSoundToThreads();log(LOG_LEVEL.DEBUG,'VISUAL',`Threads initialized: ${threads.length}`); }
+        function initEnergyAndMemoryGrids() { /* Same */ log(LOG_LEVEL.DEBUG,'CORE',"Init Energy/Memory grids...");if(!mainCanvas||mainCanvas.width<=0)return;visualEnergyGridWidth=Math.ceil(mainCanvas.width/energyGridResolution);visualEnergyGridHeight=Math.ceil(mainCanvas.height/energyGridResolution);if(visualEnergyGridWidth<=0||visualEnergyGridHeight<=0)return;visualEnergyGrid=[];nextVisualEnergyGrid=[];memoryGrid=[];nextMemoryGrid=[];for(let y=0;y<visualEnergyGridHeight;y++){visualEnergyGrid[y]=new Array(visualEnergyGridWidth).fill(0);nextVisualEnergyGrid[y]=new Array(visualEnergyGridWidth).fill(0);memoryGrid[y]=new Array(visualEnergyGridWidth).fill(0);nextMemoryGrid[y]=new Array(visualEnergyGridWidth).fill(0);}log(LOG_LEVEL.DEBUG,'CORE',`Grids initialized (${visualEnergyGridWidth}x${visualEnergyGridHeight})`); }
+        function initParticles() { log(LOG_LEVEL.DEBUG, 'VISUAL', `Initializing/Updating particles (Target Density: ${particleDensity.toFixed(2)})...`); particles = []; if (!particleCanvas || particleCanvas.width <= 0) return; const count = Math.floor(MAX_PARTICLES * particleDensity); for (let i = 0; i < count; i++) particles.push(new Particle(particleCanvas.width, particleCanvas.height)); log(LOG_LEVEL.DEBUG, 'VISUAL', `Particles initialized/updated: ${particles.length}`); }
+        function resizeCanvas() { /* Same resize logic, includes initParticles */ log(LOG_LEVEL.INFO,'CORE',"Resize event processing.");const container=document.querySelector('.container');if(!container)return;const width=container.offsetWidth,height=container.offsetHeight;if(width===mainCanvas?.width&&height===mainCanvas?.height&&width>0)return;if(width<=0||height<=0){log(LOG_LEVEL.WARN,'CORE',`Invalid dimensions: ${width}x${height}`);return;}log(LOG_LEVEL.INFO,'CORE',`Resizing canvas to ${width}x${height}`);[mainCanvas,waveCanvas,bgCanvas,particleCanvas].forEach(c=>{if(c){c.width=width;c.height=height;}});if(offCanvas){offCanvas.width=width;offCanvas.height=height;}initThreads();initEnergyAndMemoryGrids();initParticles();requestAnimationFrame(()=>{if(!isPaused){drawBackground();drawStaticElements();drawWaveOverlay();drawParticles();}});log(LOG_LEVEL.INFO,'CORE',"Resize processing complete.");}
+
+        // --- Core Logic Functions ---
+        function updateVisualEnergyGridAndMemory(){const now=performance.now();if(!visualEnergyGrid||!memoryGrid||visualEnergyGrid.length===0)return;const pulseThisFrame=now>nextMemoryPulseTime;if(pulseThisFrame){nextMemoryPulseTime=now+memoryPulseInterval*(.7+Math.random()*.6);} for(let y=0;y<visualEnergyGridHeight;y++){if(!visualEnergyGrid[y]||!nextVisualEnergyGrid[y]||!memoryGrid[y]||!nextMemoryGrid[y])continue;for(let x=0;x<visualEnergyGridWidth;x++){let cE=visualEnergyGrid[y][x]||0,cM=memoryGrid[y][x]||0,sE=0;sE+=visualEnergyGrid[y-1]?.[x]||0;sE+=visualEnergyGrid[y+1]?.[x]||0;sE+=visualEnergyGrid[y]?.[x-1]||0;sE+=visualEnergyGrid[y]?.[x+1]||0;let nE=cE*energyDecay+sE*(energySpread/4);let nM=cM*memoryDecay+cE*(1-memoryDecay)*.5;if(pulseThisFrame&&cM>.1){nE+=cM*memoryPulseStrength*(.5+Math.random()*.5);if(memoryPlayer&&voiceStates.memory&&Math.random()<.05){const freq=Tone.Midi(Tone.Frequency(scales.mid[Math.floor(Math.random()*scales.mid.length)]).toMidi()+(Math.random()-.5)*3).toFrequency();try{memoryPlayer.triggerAttackRelease(freq,"16n",Tone.context.currentTime+Math.random()*.05);}catch(e){log(LOG_LEVEL.WARN,'AUDIO','Mem echo err',e)}}} nextVisualEnergyGrid[y][x]=Math.max(0,Math.min(1.0,nE));nextMemoryGrid[y][x]=Math.max(0,Math.min(1.0,nM));}} [visualEnergyGrid,nextVisualEnergyGrid]=[nextVisualEnergyGrid,visualEnergyGrid];[memoryGrid,nextMemoryGrid]=[nextMemoryGrid,memoryGrid];}
+        function getEnergyAt(x,y){if(!visualEnergyGrid||visualEnergyGrid.length===0)return 0;const gXf=x/energyGridResolution,gYf=y/energyGridResolution,gX0=Math.floor(gXf),gY0=Math.floor(gYf),gX1=gX0+1,gY1=gY0+1;if(gY0<0||gY1>=visualEnergyGridHeight||gX0<0||gX1>=visualEnergyGridWidth)return 0;const tx=gXf-gX0,ty=gYf-gY0;try{const e00=visualEnergyGrid[gY0]?.[gX0]||0,e10=visualEnergyGrid[gY0]?.[gX1]||0,e01=visualEnergyGrid[gY1]?.[gX0]||0,e11=visualEnergyGrid[gY1]?.[gX1]||0;const ex0=e00+(e10-e00)*tx,ex1=e01+(e11-e01)*tx;return Math.max(0,Math.min(1.0,ex0+(ex1-ex0)*ty));}catch(e){log(LOG_LEVEL.WARN,'VISUAL',`Energy lookup error`,e);return 0;}}
+        function getMemoryAt(x, y) { if (!memoryGrid || memoryGrid.length === 0) return 0; const gXf = x / energyGridResolution, gYf = y / energyGridResolution; const gX0 = Math.floor(gXf), gY0 = Math.floor(gYf); const gX1 = gX0 + 1, gY1 = gY0 + 1; if (gY0 < 0 || gY1 >= visualEnergyGridHeight || gX0 < 0 || gX1 >= visualEnergyGridWidth) return 0; const tx = gXf - gX0, ty = gYf - gY0; try { const m00 = memoryGrid[gY0]?.[gX0] || 0, m10 = memoryGrid[gY0]?.[gX1] || 0; const m01 = memoryGrid[gY1]?.[gX0] || 0, m11 = memoryGrid[gY1]?.[gX1] || 0; const mx0 = m00 + (m10 - m00) * tx, mx1 = m01 + (m11 - m01) * tx; return Math.max(0, Math.min(1.0, mx0 + (mx1 - mx0) * ty)); } catch (e) { log(LOG_LEVEL.WARN, 'VISUAL', `Memory lookup error`, e); return 0; } }
+        function updateParticles(deltaTime) { if(particles.length > 0) particles.forEach(p => p.update(deltaTime, waveTime)); }
+
+        // --- Drawing Functions ---
+        function drawBackground(){if(!bgCtx||!bgCanvas||bgCanvas.width<=0)return;const grad=bgCtx.createLinearGradient(0,0,0,bgCanvas.height);grad.addColorStop(0,getComputedStyle(document.documentElement).getPropertyValue('--bg-color-top'));grad.addColorStop(1,getComputedStyle(document.documentElement).getPropertyValue('--bg-color-bottom'));bgCtx.fillStyle=grad;bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);const vigCol=getComputedStyle(document.documentElement).getPropertyValue('--vignette-color');const cx=bgCanvas.width/2,cy=bgCanvas.height/2,oR=Math.sqrt(cx*cx+cy*cy);const vigGrad=bgCtx.createRadialGradient(cx,cy,oR*.4,cx,cy,oR);vigGrad.addColorStop(0,'rgba(0,0,0,0)');vigGrad.addColorStop(1,vigCol);bgCtx.fillStyle=vigGrad;bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height); /* BG Noise removed for simplicity */ }
+        function drawStaticElements() {
+             const energyToLightFactor = energyToLightnessFactor; // Use the defined constant
+             if (!mainCtx || !mainCanvas || mainCanvas.width <= 0) return;
+             try {
+                 mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                 const borderHeight=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--border-height'));mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-color');mainCtx.fillRect(0,0,mainCanvas.width,borderHeight);const bw=mainCanvas.width;for(let i=0;i<180;i++){mainCtx.strokeStyle=`rgba(200,180,170,${.01+Math.random()*.03})`;mainCtx.lineWidth=Math.random()*.9;mainCtx.beginPath();const x=Math.random()*bw,y=Math.random()*borderHeight;mainCtx.moveTo(x,y);mainCtx.lineTo(x+Math.random()*40-20,y+Math.random()*5-2.5);mainCtx.stroke();} mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-shadow');mainCtx.fillRect(0,0,mainCanvas.width,2);mainCtx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--border-highlight');mainCtx.fillRect(0,borderHeight-2,mainCanvas.width,2);
+                 const time=performance.now()/1e3;const[baseH,baseS,baseL_css]=getComputedStyle(document.documentElement).getPropertyValue('--thread-color-base-hsl').split(',').map(s=>parseFloat(s));const threadActiveBoost=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--thread-active-l-boost'))||8;
+
+                 threads.forEach(thread=>{
+                     const e=getEnergyAt(thread.x,mainCanvas.height*.6); const glowFactor=thread.glowing?1:0;
+                     const l=(baseL_css+e*energyToLightFactor+glowFactor*threadActiveBoost); const s=thread.baseSaturation+glowFactor*5;
+                     // --- Apply Depth Fog ---
+                     const y_norm = (mainCanvas.height > 0) ? ((mainCanvas.height * 0.6) / mainCanvas.height) : 0.5; // Estimate Y pos as ratio
+                     const depthFactor = 1.0 - Math.pow(y_norm, 1.5) * depthFogAmount; // Apply fog amount from slider, non-linear
+
+                     const currentL = l * depthFactor;
+                     const currentS = s * depthFactor;
+                     const currentAlpha = (0.5 + e * 0.45 + glowFactor * 0.3) * depthFactor;
+
+                     mainCtx.strokeStyle=`hsla(${thread.baseHue}, ${currentS}%, ${currentL}%, ${currentAlpha})`;
+                     mainCtx.lineWidth=thread.width*(.9+e*.2);
+                     const swayX=Math.sin(time*thread.swaySpeed+thread.swayOffset)*thread.swayAmount;
+                     mainCtx.beginPath();const segments=10;const stepY=(mainCanvas.height-borderHeight)/segments;
+                     mainCtx.moveTo(thread.x+swayX,borderHeight);
+                     for(let i=1;i<=segments;i++){const y=borderHeight+i*stepY;const currentSway=swayX*(1-i/segments*.7);const texOffset=(Math.random()-.5)*.35;mainCtx.lineTo(thread.x+currentSway+texOffset,y);} mainCtx.stroke();
+                     if(glowFactor>0){mainCtx.globalCompositeOperation='lighter';mainCtx.lineWidth=thread.width*1.5;mainCtx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--thread-glow-color');mainCtx.globalAlpha=(.5*glowFactor)*depthFactor;mainCtx.stroke();mainCtx.globalCompositeOperation='source-over';mainCtx.globalAlpha=1.0;}
+                     mainCtx.globalAlpha=1.0;});
+             } catch (e) { log(LOG_LEVEL.ERROR,'DRAW','Error in drawStaticElements:',e);isPaused=!0; }
+         }
+        function drawWaveOverlay(){
+             if(!waveCtx||!visualEnergyGrid||visualEnergyGrid.length===0||!waveCanvas||waveCanvas.width<=0)return;
+             waveCtx.clearRect(0,0,waveCanvas.width,waveCanvas.height);
+             const sampleStep=4; const time=waveTime;
+             const [rBase, gBase, bBase] = getComputedStyle(document.documentElement).getPropertyValue('--overlay-color-rgb-base').split(',').map(s=>parseFloat(s));
+             const [rHigh, gHigh, bHigh] = getComputedStyle(document.documentElement).getPropertyValue('--overlay-color-rgb-high').split(',').map(s=>parseFloat(s));
+
+             for(let y=0;y<waveCanvas.height;y+=sampleStep){ for(let x=0;x<waveCanvas.width;x+=sampleStep){
+                 const nValBase=(noise2D_base(x*noiseScale,y*noiseScale+time)+1)/2;
+                 const nValFine=(noise2D_fine(x*noiseScaleFine,y*noiseScaleFine-time*.8)+1)/2;
+                 const nVal = nValBase * (1-noiseTextureMix) + nValFine * noiseTextureMix;
+
+                 const lEnergy=getEnergyAt(x,y);
+                 const dens=baseDensity+lEnergy*energyToDensityFactor*nVal;
+                 const alphaRaw=Math.min(.95,Math.max(0,dens));
+
+                 if(alphaRaw>.01){
+                     const displayAlpha=Math.pow(alphaRaw, overlaySharpness);
+                     const r = rBase + (rHigh - rBase) * nVal; const g = gBase + (gHigh - gBase) * nVal; const b = bBase + (bHigh - bBase) * nVal;
+                     waveCtx.fillStyle=`rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${displayAlpha})`;
+                     waveCtx.fillRect(x,y,sampleStep,sampleStep);
+                 }
+             }}
+         }
+        function drawParticles(){ if(!particleCtx||!particleCanvas||particleCanvas.width<=0)return; particleCtx.clearRect(0,0,particleCanvas.width,particleCanvas.height); const activeCount = Math.floor(particles.length * particleDensity); for(let i=0; i<activeCount; i++) particles[i].draw(particleCtx); }
+
+        // --- Audio Functions --- (Robust versions)
+        function preloadTone(){if(!audioInitPromise){log(LOG_LEVEL.INFO,'AUDIO',"Preloading Tone.js...");audioInitPromise=new Promise((res,rej)=>{if(window.Tone?.start){log(LOG_LEVEL.INFO,'AUDIO',"Tone already available.");Tone=window.Tone;res();return;} const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js';s.async=true;s.onload=()=>{if(window.Tone?.start){log(LOG_LEVEL.INFO,'AUDIO',"Tone loaded via script.");Tone=window.Tone;res();}else{log(LOG_LEVEL.ERROR,'AUDIO',"Tone script loaded but Tone object invalid.");rej(new Error("Tone invalid after load."));}};s.onerror=err=>{log(LOG_LEVEL.ERROR,'AUDIO',"Failed to load Tone script:",err);rej(err);};document.head.appendChild(s);});}return audioInitPromise;}
+        async function initAudio(){if(isAudioInitialized)return!0;log(LOG_LEVEL.INFO,'AUDIO',"Attempting audio init...");setInstructions("Conjuring sound...");try{await preloadTone();if(!Tone)throw new Error("Tone unavailable.");if(Tone.context.state!=='running'){log(LOG_LEVEL.INFO,'AUDIO',`Context state:'${Tone.context.state}'. Starting...`);await Tone.start();log(LOG_LEVEL.INFO,'AUDIO',`Context started. State:'${Tone.context.state}'`);}else{log(LOG_LEVEL.INFO,'AUDIO',"Context running.");} masterLimiter=new Tone.Limiter(-3).toDestination();reverb=new Tone.Reverb({decay:5.5,preDelay:.022,wet:.75}).connect(masterLimiter);await reverb.generate();delay=new Tone.FeedbackDelay({delayTime:"2n.",feedback:.45,wet:.4}).connect(reverb);log(LOG_LEVEL.DEBUG,'AUDIO',"Effects ready.");synths.high=new Tone.PluckSynth({attackNoise:.4,dampening:4200,resonance:.93,release:1.0,volume:-21}).connect(delay);synths.mid=new Tone.PluckSynth({attackNoise:.6,dampening:3400,resonance:.91,release:1.3,volume:-19}).connect(delay);synths.low=new Tone.PluckSynth({attackNoise:.9,dampening:2500,resonance:.89,release:2.0,volume:-17}).connect(delay);log(LOG_LEVEL.DEBUG,'AUDIO',"Plucks ready.");drone.gain=new Tone.Gain(0).connect(reverb);drone.filter=new Tone.Filter(70,"lowpass",-12).connect(drone.gain);drone.noise=new Tone.Noise("brown").connect(drone.filter).start();drone.lfo=new Tone.LFO({frequency:.02+Math.random()*.015,min:50,max:100,amplitude:1}).connect(drone.filter.frequency).start();drone.gain.gain.rampTo(voiceStates.drone?.1:0,6);log(LOG_LEVEL.DEBUG,'AUDIO',"Drone ready.");memoryPlayer=new Tone.NoiseSynth({noise:{type:'pink'},envelope:{attack:.01,decay:.15,sustain:0,release:.2},volume:-28}).connect(delay);log(LOG_LEVEL.DEBUG,'AUDIO',"Memory player ready.");isAudioInitialized=!0;soundEnabled=!0;if(document.getElementById('soundBtn'))document.getElementById('soundBtn').textContent="Sound Off";assignSoundToThreads();setInstructions("Ritual active. Weave.");log(LOG_LEVEL.INFO,'AUDIO',"Audio init complete.");return!0}catch(e){log(LOG_LEVEL.ERROR,'AUDIO',"Audio init failed:",e);setInstructions(`Sound ritual failed: ${e.message}.`);isAudioInitialized=!1;soundEnabled=!1;if(document.getElementById('soundBtn'))document.getElementById('soundBtn').textContent="Enable Sound";reverb?.dispose();delay?.dispose();masterLimiter?.dispose();Object.values(synths).forEach(s=>s?.dispose());drone.noise?.dispose();drone.filter?.dispose();drone.gain?.dispose();drone.lfo?.dispose();memoryPlayer?.dispose();reverb=null;delay=null;masterLimiter=null;synths={high:null,mid:null,low:null};drone={noise:null,filter:null,gain:null,lfo:null};memoryPlayer=null;return!1}}
+        function assignSoundToThreads(){if(!threads||!isAudioInitialized){log(LOG_LEVEL.WARN,'AUDIO',"Assign sound skipped.");return};log(LOG_LEVEL.DEBUG,'AUDIO',"Assigning sounds...");const third=Math.ceil(threadCount/3),segSize=Math.max(1,Math.floor(third/scales.high.length));threads.forEach((t,i)=>{let v,nIB;if(i<third){v='high';nIB=i;}else if(i<third*2){v='mid';nIB=i-third;}else{v='low';nIB=i-third*2;} const sc=scales[v];if(!sc)return;const nI=Math.min(sc.length-1,Math.floor(nIB/segSize));t.voice=v;t.note=sc[nI];});log(LOG_LEVEL.INFO,'AUDIO',"Sounds assigned.");}
+        function updateThreadSounds(){if(!soundEnabled||!isAudioInitialized)return;soundTriggerCounter++;if(soundTriggerCounter%soundCheckFrequency!==0)return;const now=Tone.now();threads.forEach(t=>{if(!t.voice||!voiceStates[t.voice]||!synths[t.voice])return;const energy=getEnergyAt(t.x,mainCanvas.height/2);if(energy>t.energyThreshold&&now>=t.lastPlayTime+t.cooldown/1e3){const vel=Math.min(.8,.15+energy*.8);try{synths[t.voice].triggerAttack(t.note,now+.04,vel);}catch(e){log(LOG_LEVEL.WARN,'AUDIO',`Trigger ${t.voice} error:`,e)} t.lastPlayTime=now;t.glowing=!0;setTimeout(()=>t.glowing=!1,180);}else if(energy<.05&&t.glowing)t.glowing=!1;});}
+
+        // --- Interaction Functions ---
+        function addDisturbance(canvasX,canvasY,radius=10,strength=1){log(LOG_LEVEL.DEBUG,'INTERACT',`Dist @(${canvasX.toFixed(0)},${canvasY.toFixed(0)}) R:${radius} S:${strength.toFixed(2)}`);const gridX=Math.floor(canvasX/energyGridResolution),gridY=Math.floor(canvasY/energyGridResolution),gridRadius=Math.max(1,Math.ceil(radius/energyGridResolution*disturbanceRadiusFactor));for(let dy=-gridRadius;dy<=gridRadius;dy++)for(let dx=-gridRadius;dx<=gridRadius;dx++){const gx=gridX+dx,gy=gridY+dy;if(visualEnergyGrid[gy]?.[gx]!==undefined){const dist=Math.sqrt(dx*dx+dy*dy);if(dist<=gridRadius){const falloff=Math.pow(Math.max(0,1-dist/gridRadius),1.7);const impact=strength*falloff*.95;visualEnergyGrid[gy][gx]=Math.min(1.0,visualEnergyGrid[gy][gx]+impact);}}} if(soundEnabled&&isAudioInitialized){let cI=-1,mD=Infinity;threads.forEach((t,i)=>{const d=Math.abs(t.x-canvasX);if(d<mD){mD=d;cI=i;}});if(cI!==-1&&mD<threadSpacing*1.8){const t=threads[cI];if(t.voice&&voiceStates[t.voice]&&synths[t.voice]){const n=Tone.now();if(n>=t.lastPlayTime+(t.cooldown/1e3)*.25){const vel=Math.min(.95,.4+strength*.55);try{synths[t.voice].triggerAttack(t.note,n+.01,vel);}catch(e){log(LOG_LEVEL.WARN,'AUDIO',"Direct trigger error:",e)} t.lastPlayTime=n;t.glowing=!0;setTimeout(()=>t.glowing=!1,160);}}}}}
+        function updateParametersFromSliders() {
+             try {
+                 noiseSpeed = 0.001 + (parseInt(document.getElementById('speedSlider')?.value ?? 15)/100) * 0.01;
+                 energyDecay = 0.965 + (parseInt(document.getElementById('decaySlider')?.value ?? 92)/100) * 0.034; // Range .965-.999
+                 disturbanceRadiusFactor = 0.1 + (parseInt(document.getElementById('disturbanceSlider')?.value ?? 30)/100) * 0.7;
+                 noiseTextureMix = parseInt(document.getElementById('textureSlider')?.value ?? 60) / 100;
+                 overlaySharpness = 1.0 + (parseInt(document.getElementById('sharpnessSlider')?.value ?? 40) / 100) * 1.5;
+                 depthFogAmount = parseInt(document.getElementById('depthSlider')?.value ?? 30) / 100;
+                 particleDensity = parseInt(document.getElementById('particleSlider')?.value ?? 50) / 100;
+                 initParticles(); // Re-initialize particles with new density factor
+
+                 if(isAudioInitialized && reverb?.wet) reverb.wet.value = parseInt(document.getElementById('reverbSlider')?.value ?? 70)/100;
+                 log(LOG_LEVEL.DEBUG,'PARAM',`Params updated via sliders.`);
+             } catch (e) { log(LOG_LEVEL.ERROR,'PARAM',"Slider update error:", e); }
+         }
+
+        // --- Camera Functions --- (Robust versions)
+        function initCamera(){log(LOG_LEVEL.INFO,'CAMERA','Init camera...');if(!navigator.mediaDevices?.getUserMedia){log(LOG_LEVEL.ERROR,'CAMERA',"getUserMedia unsupported.");setInstructions("Camera not supported.");return;} if(!videoElement){log(LOG_LEVEL.ERROR,'CAMERA',"Video element missing.");return;} navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:!1}).then(stream=>{videoElement.srcObject=stream;videoElement.onloadedmetadata=()=>{videoElement.play().then(()=>{cameraEnabled=!0;prevImageData=null;if(cameraBtn)cameraBtn.textContent="Camera On";setInstructions("Move to weave.");log(LOG_LEVEL.INFO,'CAMERA',"Camera ready.");}).catch(e=>{log(LOG_LEVEL.ERROR,'CAMERA',"Video play failed:",e);disableCamera();});};}).catch(err=>{log(LOG_LEVEL.ERROR,'CAMERA',"Error accessing camera:",err);setInstructions(`Camera Error: ${err.message}`);cameraEnabled=!1;if(cameraBtn)cameraBtn.textContent="Camera Off";});}
+        function disableCamera(){log(LOG_LEVEL.INFO,'CAMERA','Disabling camera...');if(videoElement?.srcObject){videoElement.srcObject.getTracks().forEach(t=>t.stop());videoElement.srcObject=null;videoElement.load();} cameraEnabled=!1;prevImageData=null;if(cameraBtn)cameraBtn.textContent="Camera Off";setInstructions("Click 'Enable Sound', then weave.");}
+        function processCameraFeed(currentTime){if(!cameraEnabled||!videoElement||videoElement.paused||videoElement.ended||videoElement.readyState<videoElement.HAVE_METADATA)return;if(currentTime-lastProcessedCameraTime<cameraProcessInterval)return;lastProcessedCameraTime=currentTime;try{if(!offCtx||!offCanvas)return;offCtx.save();offCtx.scale(-1,1);offCtx.drawImage(videoElement,-offCanvas.width,0,offCanvas.width,offCanvas.height);offCtx.restore();const cID=offCtx.getImageData(0,0,offCanvas.width,offCanvas.height);if(prevImageData){const data=cID.data,pData=prevImageData.data,w=cID.width,h=cID.height,step=7;for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){const i=(y*w+x)*4,rD=Math.abs(data[i]-pData[i]),gD=Math.abs(data[i+1]-pData[i+1]),bD=Math.abs(data[i+2]-pData[i+2]),diff=(rD+gD+bD)/3;if(diff>motionThreshold)addDisturbance(x,y,70,diff/110);}}prevImageData=cID;}catch(e){log(LOG_LEVEL.ERROR,'CAMERA',"Error processing camera feed:",e);}}
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners(){ /* Add listeners for new sliders */ log(LOG_LEVEL.INFO,'INIT',"Setting up event listeners...");let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(resizeCanvas,150);});const hPD=(e)=>{if(!isPaused&&!cameraEnabled){e.preventDefault();mainCanvas.style.cursor='grabbing';mainCanvas.setPointerCapture(e.pointerId);addDisturbance(e.clientX,e.clientY,100,1.0);}};const hPM=(e)=>{if(!isPaused&&!cameraEnabled&&e.buttons===1&&mainCanvas.hasPointerCapture(e.pointerId)){e.preventDefault();addDisturbance(e.clientX,e.clientY,80,0.5);}};const rP=(e)=>{mainCanvas.style.cursor='grab';if(mainCanvas.hasPointerCapture(e.pointerId))mainCanvas.releasePointerCapture(e.pointerId);};mainCanvas.style.cursor='grab';mainCanvas.addEventListener('pointerdown',hPD);mainCanvas.addEventListener('pointermove',hPM);mainCanvas.addEventListener('pointerup',rP);mainCanvas.addEventListener('pointerleave',rP);mainCanvas.addEventListener('pointercancel',rP);mainCanvas.addEventListener('contextmenu',e=>e.preventDefault());document.getElementById('pauseBtn')?.addEventListener('click',function(){isPaused=!isPaused;this.textContent=isPaused?'Resume':'Pause';log(LOG_LEVEL.INFO,'UI',`Sim ${isPaused?'Paused':'Resumed'}`);});document.getElementById('soundBtn')?.addEventListener('click',async function(){if(!isAudioInitialized&&!soundEnabled){log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked");this.textContent="Loading...";this.disabled=!0;const s=await initAudio();if(s){this.textContent="Sound Off";}else{this.textContent="Sound Error";setInstructions("Failed audio start.");} this.disabled=!1;}else if(soundEnabled){log(LOG_LEVEL.INFO,'UI',"Disable Sound clicked");soundEnabled=!1;this.textContent="Enable Sound";}else{log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked (Re-enable)");soundEnabled=!0;if(!isAudioInitialized){const s=await initAudio();if(!s){soundEnabled=!1;this.textContent="Sound Error";return;}} this.textContent="Sound Off";}});cameraBtn?.addEventListener('click',function(){if(!cameraEnabled)initCamera();else disableCamera();});document.querySelectorAll('.voice-button').forEach(b=>b.addEventListener('click',function(){const v=this.dataset.voice;if(v){voiceStates[v]=!voiceStates[v];this.classList.toggle('active');log(LOG_LEVEL.INFO,'UI',`Voice ${v} ${voiceStates[v]?'ON':'OFF'}`);if(v==='drone'&&drone.gain)drone.gain.gain.linearRampTo(voiceStates.drone?.1:0,1);}}));document.getElementById('reverbSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('speedSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('decaySlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('disturbanceSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('textureSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('sharpnessSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('depthSlider')?.addEventListener('input',updateParametersFromSliders);document.getElementById('particleSlider')?.addEventListener('input',updateParametersFromSliders);uiToggleButton?.addEventListener('click',()=>{const h=controlsPanel.classList.toggle('hidden');titleElement.classList.toggle('hidden',h);instructionsElement.classList.toggle('hidden',h);log(LOG_LEVEL.INFO,'UI',`Controls ${h?'hidden':'shown'}`);});fullscreenButton?.addEventListener('click',()=>{try{if(document.fullscreenElement)document.exitFullscreen();else document.querySelector('.container')?.requestFullscreen();log(LOG_LEVEL.INFO,'UI',`Fullscreen toggled`);}catch(e){log(LOG_LEVEL.ERROR,'UI',"Fullscreen error:",e);}});log(LOG_LEVEL.INFO,'INIT',"Event listeners attached.");}
+
+        // --- Animation Loop ---
+        function animate(currentTime) {
+            animationFrameId = requestAnimationFrame(animate);
+            const now = performance.now();
+            if (!lastTime) lastTime = now;
+            const deltaTime = Math.min(50, now - lastTime); // Capped delta time in ms
+            lastTime = now;
+
+            try {
+                if (!isPaused) {
+                    waveTime += noiseSpeed * (deltaTime / 16.67); // Adjust speed by frame time
+                    updateVisualEnergyGridAndMemory();
+                    updateThreadSounds();
+                    updateParticles(deltaTime);
+                    if (cameraEnabled) processCameraFeed(currentTime);
+                }
+                // Draw layers
+                drawBackground();
+                drawStaticElements();
+                drawWaveOverlay();
+                drawParticles();
+
+                frameCounter++;
+
+            } catch (error) { log(LOG_LEVEL.ERROR,'LOOP',"Anim loop error:",error); isPaused=true; if(document.getElementById('pauseBtn'))document.getElementById('pauseBtn').textContent='ERR!'; setInstructions("Runtime Error!"); cancelAnimationFrame(animationFrameId); }
+        }
+
+        // --- Global Init ---
+        function init() {
+            log(LOG_LEVEL.INFO, 'INIT', "===== Initializing Nobode Depths Loom [Enhanced V2] =====");
+            try {
+                // Initialize Noise generators
+                noise2D_base = createNoise2D(Math.random);
+                noise2D_fine = createNoise2D(Math.random);
+                noise2D_bg = createNoise2D(Math.random); // Using 2D for background for simplicity now
+
+                setupDOMReferences();
+                resizeCanvas(); // Initial setup
+                setupEventListeners();
+
+                controlsPanel?.classList.add('hidden'); titleElement?.classList.add('hidden'); instructionsElement?.classList.add('hidden');
+                nextMemoryPulseTime = performance.now() + memoryPulseInterval * (0.5 + Math.random());
+
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                frameCounter = 0; lastTime = 0;
+                updateParametersFromSliders(); // Set initial values
+                animationFrameId = requestAnimationFrame(animate);
+                log(LOG_LEVEL.INFO, 'INIT', "Initialization complete. Animation loop started.");
+                setInstructions("Click 'Enable Sound', then weave.");
+
+            } catch (error) { log(LOG_LEVEL.ERROR,'INIT',"Initialization failed:",error); setInstructions("Initialization Error!"); alert(`Init Error: ${error.message}`); }
+        }
+
+        // --- Start ---
+        if (document.readyState === 'loading') { window.addEventListener('DOMContentLoaded', init); }
+        else { init(); }
+
+    </script>
+</body>
+</html>

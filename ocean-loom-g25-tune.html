@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom — Wine-Dark Sea</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* Wine-dark sea background */
+            background: linear-gradient(to bottom, #100518, #0A020F);
+            font-family: 'Courier New', monospace;
+            /* Deep red/purple text */
+            color: rgba(210, 130, 160, 0.7);
+            touch-action: none;
+            width: 100%;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #main-canvas {
+            z-index: 1;
+        }
+
+        #echo-canvas {
+            z-index: 2;
+            opacity: 0.75; /* Stronger echo */
+            /* Blend mode for deep color interaction */
+            mix-blend-mode: screen; /* or 'lighten' could work */
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            /* Darker, desaturated controls background */
+            background: rgba(20, 5, 30, 0.75);
+            padding: 15px;
+            border-radius: 8px;
+            /* Subtler, deep red border */
+            border: 1px solid rgba(180, 80, 100, 0.3);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            transition: transform 0.3s ease-out;
+        }
+
+        .controls.hidden {
+            transform: translateY(120%);
+        }
+
+        button {
+             /* Deep red/purple buttons */
+            background: rgba(80, 20, 50, 0.7);
+            color: rgba(220, 160, 190, 0.9);
+            border: 1px solid rgba(180, 80, 100, 0.5);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        button:hover {
+            background: rgba(110, 40, 70, 0.8);
+            border-color: rgba(200, 100, 120, 0.7);
+        }
+
+        button.active {
+            background: rgba(130, 50, 80, 0.9);
+            box-shadow: 0 0 10px rgba(200, 100, 120, 0.4);
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 5px;
+        }
+
+        .slider-container span {
+            font-size: 11px;
+            margin-bottom: 4px;
+            color: rgba(210, 130, 160, 0.6);
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 90px;
+            height: 3px; /* Slightly thicker slider */
+             /* Reddish track */
+            background: rgba(180, 80, 100, 0.3);
+            border-radius: 1.5px;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+             /* Brighter red thumb */
+            background: rgba(210, 100, 130, 0.8);
+            cursor: pointer;
+        }
+
+        #info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+             /* Match controls background */
+            background: rgba(20, 5, 30, 0.75);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 280px;
+            text-align: right;
+             /* Match controls border */
+            border: 1px solid rgba(180, 80, 100, 0.3);
+            transition: opacity 0.3s ease-out;
+        }
+
+         #info h3 {
+             margin-bottom: 5px;
+             color: rgba(220, 160, 190, 0.9);
+        }
+        #info p {
+            font-size: 13px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            color: rgba(210, 130, 160, 0.7);
+        }
+
+        #info.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .toggle-ui {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 101;
+            width: 35px;
+            height: 35px;
+            /* Button style match */
+            background: rgba(80, 20, 50, 0.8);
+            border: 1px solid rgba(180, 80, 100, 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            color: rgba(220, 160, 190, 0.9);
+            font-size: 20px; /* Slightly bolder icon */
+             transition: background-color 0.2s;
+        }
+         .toggle-ui:hover {
+             background: rgba(110, 40, 70, 0.9);
+         }
+
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="echo-canvas"></canvas>
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+
+    <div id="controls" class="hidden">
+        <button id="reset-btn">Reset</button>
+        <button id="sound-btn">Enable Sound</button>
+        <button id="camera-btn">Camera Mode</button>
+        <button id="fullscreen-btn">Fullscreen</button>
+
+        <div class="slider-container">
+            <span>Wave Speed</span>
+            {/* Default moderate speed */}
+            <input type="range" min="0" max="100" value="55" class="slider" id="speed-slider">
+        </div>
+
+        <div class="slider-container">
+            <span>Wave Falloff</span> {/* Renamed */}
+            {/* Default moderate decay */}
+            <input type="range" min="0" max="100" value="60" class="slider" id="decay-slider">
+        </div>
+
+        <div class="slider-container">
+            <span>Wave Power</span> {/* Renamed */}
+            {/* Default higher power */}
+            <input type="range" min="0" max="100" value="75" class="slider" id="resonance-slider">
+        </div>
+    </div>
+
+    <div id="info" class="hidden">
+        <h3>Ocean Loom</h3>
+        <p>Potent waves weave through crimson threads.</p>
+        <p>Disturb the wine-dark sea.</p>
+    </div>
+
+    <div class="toggle-ui">~</div> {/* Changed icon */}
+
+    <script>
+        // Canvas and context setup
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        mainCtx.lineCap = 'round'; // Smoother lines
+
+        const echoCanvas = document.getElementById('echo-canvas');
+        const echoCtx = echoCanvas.getContext('2d');
+
+        // Global state
+        let soundEnabled = false;
+        let isAudioInitialized = false;
+        let cameraEnabled = false;
+        let isPaused = false;
+        let lastTime = 0;
+        let animationFrameId = null;
+
+        // Thread system variables ("Red Looms")
+        const threadCount = 80; // Fewer, potentially thicker threads
+        let threads = [];
+        let threadWidth = 2.0; // Thicker threads
+        let threadSpacing;
+
+        // Wave and animation parameters (tuned for potency)
+        let waveTime = 0;
+        let waveSpeed = 0.015; // Moderate base speed
+        let waveFrequency = 0.01; // Lower frequency for larger waves
+        let baseDecay = 0.97; // Faster base decay for more impact/less lingering
+        let baseResonance = 0.4; // Higher base resonance for powerful propagation
+
+        // Slit scan history
+        const historyLength = 80; // Shorter history for more defined trails
+        let slitHistory = [];
+        let slitPosition = 0;
+        let slitSpeed = 0.8; // Faster slit scan
+
+        // Camera and motion detection
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+        let motionThreshold = 25; // Lower threshold for more sensitivity
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 60; // Process more frequently
+
+        // --- Audio Overhaul ---
+        let audioContext = null;
+        let masterGain = null;
+        let reverb = null;
+        let delay = null;
+        let delayFeedback = null;
+        let oscillators = []; // { osc, filter, gain, type }
+        let noiseOsc = null; // For ocean rumble
+
+         // Darker, more complex frequencies (Minor scale, lower range)
+        const noteFrequencies = [
+             // C Minor scale tones across octaves + some lower fundamentals
+             65.41, // C2
+             73.42, // D2
+             77.78, // Eb2
+             87.31, // F2
+             98.00, // G2
+             110.00, // A2 (for bass)
+             103.83, // Ab2
+             116.54, // Bb2
+             130.81, // C3
+             155.56, // Eb3
+             174.61, // F3
+             196.00, // G3
+             207.65, // Ab3
+             233.08, // Bb3
+             261.63, // C4
+        ];
+
+        // UI Elements
+        const controlsPanel = document.getElementById('controls');
+        const infoPanel = document.getElementById('info');
+        const uiToggleButton = document.querySelector('.toggle-ui');
+
+        // --- Initialization ---
+
+        function resizeCanvases() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            mainCanvas.width = width;
+            mainCanvas.height = height;
+            echoCanvas.width = width;
+            echoCanvas.height = height;
+
+            offCanvas.width = width;
+            offCanvas.height = height;
+
+            initThreads();
+            initSlitHistory();
+
+             if (!isPaused) {
+                drawScene();
+                updateSlitScanVisuals();
+             }
+        }
+
+        function initThreads() {
+            threads = [];
+            threadSpacing = mainCanvas.width / (threadCount + 1);
+            const baseHue = 0; // Red base
+
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    width: threadWidth * (0.8 + Math.random() * 0.4), // Vary thickness slightly
+                    energy: 0,
+                    offset: Math.random() * Math.PI * 2,
+                    tension: 0.9 + Math.random() * 0.4, // Slightly higher tension
+                    decay: baseDecay + (Math.random() - 0.5) * 0.02,
+                    resonance: baseResonance + (Math.random() - 0.5) * 0.1,
+                    hueShift: (Math.random() - 0.5) * 10 // Smaller hue shift, stay near red
+                });
+            }
+            updateParametersFromSliders();
+        }
+
+        function initSlitHistory() {
+            slitHistory = [];
+            const initialImageData = echoCtx.createImageData(1, mainCanvas.height);
+            for (let i = 0; i < historyLength; i++) {
+                slitHistory.push(initialImageData);
+            }
+            slitPosition = mainCanvas.width / 2;
+        }
+
+         async function initAudio() {
+            if (isAudioInitialized) {
+                 if (audioContext && audioContext.state === 'suspended') {
+                    try {
+                        await audioContext.resume();
+                        console.log("AudioContext resumed.");
+                        masterGain.gain.setValueAtTime(0.5, audioContext.currentTime); // Restore gain
+                        soundEnabled = true;
+                        document.getElementById('sound-btn').textContent = "Sound On";
+                        document.getElementById('sound-btn').classList.add('active');
+                        return true;
+                    } catch (err) {
+                        console.error("Error resuming AudioContext:", err);
+                        return false;
+                    }
+                } else if (audioContext && audioContext.state === 'running') {
+                     masterGain.gain.setValueAtTime(0.5, audioContext.currentTime); // Ensure gain is up
+                     soundEnabled = true; // Ensure state
+                     document.getElementById('sound-btn').textContent = "Sound On";
+                     document.getElementById('sound-btn').classList.add('active');
+                    return true; // Already running fine
+                }
+            }
+
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (error) {
+                console.error("Error creating AudioContext:", error);
+                alert("Web Audio API is not supported.");
+                return false;
+            }
+
+             if (audioContext.state === 'suspended') {
+                 // Wait for user gesture if suspended initially
+                 console.log("AudioContext suspended, needs user interaction to start.");
+                 // We'll attempt resume on button click later
+                 // Don't mark as initialized yet, but context exists
+                 return false; // Indicate it's not ready yet
+             }
+
+            try {
+                 // --- Audio Graph Setup ---
+                masterGain = audioContext.createGain();
+                masterGain.gain.setValueAtTime(0.5, audioContext.currentTime); // Start at moderate volume
+
+                // Reverb (Darker, larger space)
+                reverb = audioContext.createConvolver();
+                const impulseLength = audioContext.sampleRate * 3.5; // Longer reverb
+                const impulseDecay = 4.0; // Slower decay exponent
+                const impulse = audioContext.createBuffer(2, impulseLength, audioContext.sampleRate);
+                for (let channel = 0; channel < 2; channel++) {
+                    const impulseData = impulse.getChannelData(channel);
+                    for (let i = 0; i < impulseLength; i++) {
+                        impulseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, impulseDecay);
+                    }
+                }
+                reverb.buffer = impulse;
+
+                // Delay (Echo effect)
+                delay = audioContext.createDelay(2.0); // Max delay 2 seconds
+                delay.delayTime.value = 0.4; // Default delay time
+                delayFeedback = audioContext.createGain();
+                delayFeedback.gain.value = 0.4; // Feedback amount
+                delay.connect(delayFeedback);
+                delayFeedback.connect(delay); // Feedback loop
+                delayFeedback.connect(reverb); // Delay feeds into reverb
+
+                // Connect nodes: Master -> Destination, Reverb -> Master, Delay -> Master
+                reverb.connect(masterGain);
+                delay.connect(masterGain); // Send delay output to master gain too
+                masterGain.connect(audioContext.destination);
+
+                // Oscillators (mix of types)
+                oscillators = [];
+                const numOscillators = 5; // Fewer, more impactful voices
+                const oscTypes = ['sawtooth', 'square', 'sine']; // Richer waveforms
+                for (let i = 0; i < numOscillators; i++) {
+                    const osc = audioContext.createOscillator();
+                    const type = oscTypes[i % oscTypes.length];
+                    osc.type = type;
+
+                    // Add a filter per oscillator for control
+                    const filter = audioContext.createBiquadFilter();
+                    filter.type = 'lowpass'; // Start as lowpass
+                    filter.frequency.value = 5000; // Start open
+                    filter.Q.value = 1.5;
+
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = 0; // Start silent
+
+                    osc.connect(filter);
+                    filter.connect(gainNode);
+
+                    // Send output to multiple destinations: direct, delay, reverb
+                    gainNode.connect(masterGain); // Direct signal
+                    gainNode.connect(delay);      // Send to delay
+                    gainNode.connect(reverb);     // Send to reverb (adjust gain below)
+
+                    osc.start();
+                    oscillators.push({ osc, filter, gainNode, type });
+                }
+
+                 // Noise Oscillator for deep rumble
+                 try {
+                     noiseOsc = audioContext.createBufferSource();
+                     const bufferSize = audioContext.sampleRate * 2; // 2 seconds of noise
+                     const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                     const output = noiseBuffer.getChannelData(0);
+                     for (let i = 0; i < bufferSize; i++) {
+                         output[i] = Math.random() * 2 - 1; // White noise
+                     }
+                     noiseOsc.buffer = noiseBuffer;
+                     noiseOsc.loop = true;
+
+                     const noiseFilter = audioContext.createBiquadFilter();
+                     noiseFilter.type = 'lowpass';
+                     noiseFilter.frequency.value = 120; // Keep it low rumble
+                     noiseFilter.Q.value = 2;
+
+                     const noiseGain = audioContext.createGain();
+                     noiseGain.gain.value = 0.05; // Very subtle background rumble
+
+                     noiseOsc.connect(noiseFilter);
+                     noiseFilter.connect(noiseGain);
+                     noiseGain.connect(masterGain);
+                     noiseOsc.start();
+                 } catch (noiseError) {
+                     console.warn("Could not create noise oscillator:", noiseError);
+                     noiseOsc = null; // Ensure it's null if failed
+                 }
+
+
+                soundEnabled = true;
+                isAudioInitialized = true;
+                document.getElementById('sound-btn').textContent = "Sound On";
+                document.getElementById('sound-btn').classList.add('active');
+                console.log("Audio initialized successfully.");
+                return true;
+
+            } catch (error) {
+                console.error("Error initializing audio components:", error);
+                if (audioContext) {
+                     audioContext.close().catch(e => console.error("Error closing failed audio context:", e));
+                     audioContext = null;
+                }
+                soundEnabled = false;
+                isAudioInitialized = false;
+                 document.getElementById('sound-btn').textContent = "Enable Sound";
+                 document.getElementById('sound-btn').classList.remove('active');
+                return false;
+            }
+        }
+
+        // --- Interaction & Updates ---
+
+        function addDisturbance(x, y, radius, strength) {
+            let triggeredSound = false;
+            // Potent strength - scale more aggressively
+            const adjustedStrength = strength * 1.5;
+
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const distance = Math.abs(thread.x - x);
+
+                if (distance < radius) {
+                    const falloff = Math.pow(1 - distance / radius, 1.8); // Sharper falloff for impact
+                    const impact = Math.min(1.0, adjustedStrength * falloff); // Cap impact
+
+                    // Add energy more aggressively
+                    thread.energy = Math.min(1.0, thread.energy + impact * 0.8);
+
+                    if (soundEnabled && isAudioInitialized && !triggeredSound && impact > 0.1) {
+                         // Pass higher intensity to sound
+                        triggerPotentSound(i, Math.min(1.0, impact * 1.2));
+                        triggeredSound = true;
+                    }
+                }
+            }
+        }
+
+         // Trigger potent, darker sounds
+        function triggerPotentSound(threadIndex, intensity) {
+            if (!audioContext || oscillators.length === 0) return;
+
+            const voiceIndex = Math.floor(Math.random() * oscillators.length);
+            const voice = oscillators[voiceIndex];
+            const { osc, filter, gainNode } = voice;
+
+            // Choose frequency based on thread position (lower threads = lower notes)
+            const freqRangeIndex = Math.floor((threadIndex / threadCount) * noteFrequencies.length);
+             const baseFreq = noteFrequencies[Math.max(0, Math.min(noteFrequencies.length - 1, freqRangeIndex))];
+             // Add slight random pitch variation for richness
+             const frequency = baseFreq * (0.98 + Math.random() * 0.04);
+
+            const now = audioContext.currentTime;
+
+             // Set frequency - allow slight glide if changing
+             osc.frequency.cancelScheduledValues(now);
+             osc.frequency.setValueAtTime(osc.frequency.value, now); // Start from current
+             osc.frequency.linearRampToValueAtTime(frequency, now + 0.05); // Quick glide
+
+            // Filter modulation - make it 'speak' or 'roar'
+            const baseFilterFreq = voice.type === 'sine' ? 3000 : 1500; // Different base for sine
+             const peakFilterFreq = baseFilterFreq + intensity * 4000; // Intensity opens filter
+             filter.frequency.cancelScheduledValues(now);
+             filter.frequency.setValueAtTime(filter.frequency.value, now);
+             filter.frequency.linearRampToValueAtTime(peakFilterFreq, now + 0.08); // Quick opening sweep
+             // Slower closing sweep, maybe dependent on osc type
+             const filterCloseTime = voice.type === 'square' ? 0.8 : 1.5;
+             filter.frequency.exponentialRampToValueAtTime(baseFilterFreq * 0.5, now + filterCloseTime); // Close down
+
+             // Gain Envelope - Sharp attack, strong sustain, long release
+             const attackTime = 0.03;
+             const decayTime = 0.4;
+             const sustainLevel = intensity * 0.6; // Stronger sustain
+             const releaseTime = 2.0 + intensity * 2.0; // Longer release when intense
+
+             gainNode.gain.cancelScheduledValues(now);
+             gainNode.gain.setValueAtTime(gainNode.gain.value, now); // Avoid clicks
+             gainNode.gain.linearRampToValueAtTime(intensity * 0.8, now + attackTime); // Sharp attack
+             gainNode.gain.linearRampToValueAtTime(sustainLevel, now + attackTime + decayTime); // Decay to sustain
+             // Hold sustain briefly then release
+             gainNode.gain.setValueAtTime(sustainLevel, now + attackTime + decayTime + 0.5);
+             gainNode.gain.exponentialRampToValueAtTime(0.001, now + attackTime + decayTime + 0.5 + releaseTime); // Long exponential release
+        }
+
+        // (Camera init/disable functions remain largely the same, maybe adjust threshold/interval)
+         function initCamera() {
+             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("Camera access (getUserMedia) is not supported by your browser.");
+                return;
+            }
+             navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user" }, audio: false
+            })
+            .then((stream) => {
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play().catch(e => console.error("Video play failed:", e));
+                    cameraEnabled = true;
+                    prevImageData = null;
+                    document.getElementById('camera-btn').textContent = "Camera Active";
+                    document.getElementById('camera-btn').classList.add('active');
+                    document.querySelector('#info p:last-child').textContent = "Move to disturb the sea.";
+                     console.log("Camera initialized.");
+                };
+            })
+            .catch((err) => {
+                console.error("Error accessing camera: ", err);
+                 alert("Could not access the camera. Please ensure permission is granted.");
+                 disableCamera();
+            });
+        }
+
+        function disableCamera() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            cameraEnabled = false;
+            prevImageData = null;
+            const cameraBtn = document.getElementById('camera-btn');
+            cameraBtn.textContent = "Camera Mode";
+            cameraBtn.classList.remove('active');
+            document.querySelector('#info p:last-child').textContent = "Disturb the wine-dark sea.";
+             console.log("Camera disabled.");
+        }
+
+        function processCameraFeed(currentTime) {
+            if (!cameraEnabled || video.readyState < video.HAVE_METADATA || video.paused || video.ended) return;
+            if (currentTime - lastProcessedCameraTime < cameraProcessInterval) return;
+
+            lastProcessedCameraTime = currentTime;
+
+            try {
+                offCtx.save();
+                offCtx.scale(-1, 1);
+                offCtx.drawImage(video, -offCanvas.width, 0, offCanvas.width, offCanvas.height);
+                offCtx.restore();
+                const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+
+                if (prevImageData) {
+                    const data = imageData.data;
+                    const prevData = prevImageData.data;
+                    const width = imageData.width;
+                    const height = imageData.height;
+                    const step = 5; // Sample slightly sparser
+
+                    for (let y = 0; y < height; y += step) {
+                        for (let x = 0; x < width; x += step) {
+                            const index = (y * width + x) * 4;
+                            const rDiff = Math.abs(data[index] - prevData[index]);
+                            const gDiff = Math.abs(data[index + 1] - prevData[index + 1]);
+                            const bDiff = Math.abs(data[index + 2] - prevData[index + 2]);
+                            const diff = (rDiff + gDiff + bDiff) / 3;
+
+                            if (diff > motionThreshold) {
+                                // Create stronger disturbance from motion
+                                addDisturbance(x, y, 35, diff / 80); // More strength from diff
+                            }
+                        }
+                    }
+                }
+                prevImageData = imageData;
+            } catch (e) {
+                 console.error("Error processing camera feed:", e);
+            }
+        }
+
+
+        function updateThreads() {
+             // Apply decay first
+            for(let thread of threads) {
+                 thread.energy *= thread.decay;
+                 if (thread.energy < 0.001) thread.energy = 0;
+            }
+             // Then apply resonance/spread (prevents feedback loops within one step)
+             let energyToAdd = new Array(threads.length).fill(0);
+             for (let i = 0; i < threads.length; i++) {
+                 const thread = threads[i];
+                 if (thread.energy > 0.01) {
+                     const transferAmount = thread.energy * thread.resonance * 0.08; // More aggressive transfer
+                     if (i > 0) energyToAdd[i-1] += transferAmount;
+                     if (i < threads.length - 1) energyToAdd[i+1] += transferAmount;
+                 }
+             }
+             // Add the transferred energy
+             for (let i = 0; i < threads.length; i++) {
+                 threads[i].energy = Math.min(1.0, threads[i].energy + energyToAdd[i]);
+             }
+        }
+
+        function updateSlitScan() {
+            if (mainCanvas.width <= 0 || mainCanvas.height <= 0) return;
+            slitPosition = (slitPosition + slitSpeed) % mainCanvas.width;
+            const slitX = Math.floor(slitPosition);
+
+            if (slitX >= 0 && slitX < mainCanvas.width) {
+                try {
+                    const slitData = mainCtx.getImageData(slitX, 0, 1, mainCanvas.height);
+                    slitHistory.shift();
+                    slitHistory.push(slitData);
+                } catch(e) {
+                    console.warn("Could not get slit image data at x=" + slitX + ":", e.message);
+                     slitHistory.shift();
+                     slitHistory.push(echoCtx.createImageData(1, mainCanvas.height));
+                }
+            } else {
+                 slitHistory.shift();
+                 slitHistory.push(echoCtx.createImageData(1, mainCanvas.height));
+            }
+            updateSlitScanVisuals();
+        }
+
+        function updateSlitScanVisuals() {
+            // Clear echo canvas with a dark, slightly transparent color
+            echoCtx.fillStyle = 'rgba(5, 1, 10, 0.12)'; // Dark purple/black fade
+            echoCtx.fillRect(0, 0, echoCanvas.width, echoCanvas.height);
+
+            const currentSlitX = Math.floor(slitPosition);
+            for (let i = 0; i < slitHistory.length; i++) {
+                const x = (currentSlitX - i + mainCanvas.width) % mainCanvas.width;
+                 // Sharper opacity falloff for more defined trails
+                const opacity = Math.pow(1 - (i / historyLength), 1.5) * 0.8;
+
+                echoCtx.globalAlpha = opacity;
+                try {
+                    if (slitHistory[i] && slitHistory[i].width > 0 && slitHistory[i].height > 0) {
+                        echoCtx.putImageData(slitHistory[i], x, 0);
+                    }
+                } catch (e) {
+                    console.warn("Error putting slit image data at x=" + x + ":", e.message);
+                }
+            }
+            echoCtx.globalAlpha = 1.0;
+        }
+
+
+        // --- Drawing ---
+
+        function drawScene() {
+            // Clear main canvas with wine-dark gradient
+            const gradient = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
+            gradient.addColorStop(0, '#180820'); // Dark Purple/Red top
+            gradient.addColorStop(0.7, '#0F0312'); // Deeper towards bottom
+             gradient.addColorStop(1, '#050106'); // Near black at bottom
+            mainCtx.fillStyle = gradient;
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+            mainCtx.globalCompositeOperation = 'source-over';
+
+            for (let i = 0; i < threads.length; i++) {
+                const thread = threads[i];
+                const x = thread.x;
+
+                // Base Red Loom color + Energy effect
+                const baseHue = 355; // Deep red base
+                const hue = baseHue + thread.hueShift + thread.energy * 15; // Shift towards orange/magenta
+                const saturation = 70 + thread.energy * 30; // More saturated when active
+                const lightness = 30 + thread.energy * 45; // Much brighter when active
+                mainCtx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, 0.85)`; // Slightly less alpha
+                mainCtx.lineWidth = thread.width;
+
+                mainCtx.beginPath();
+                const yStep = 4; // Finer steps for smoother thick lines
+                let firstPoint = true;
+
+                for (let y = 0; y <= mainCanvas.height; y += yStep) {
+                    // Potent wave distortion
+                    const waveFactor1 = Math.sin(y * waveFrequency + waveTime + thread.offset) * thread.energy * 40; // Increased base amplitude
+                    const waveFactor2 = Math.sin(y * waveFrequency * 1.8 + waveTime * 0.7 + thread.offset * 1.2) * thread.energy * 25; // Add higher frequency component
+                    const displacement = (waveFactor1 + waveFactor2) * thread.tension * (1 + thread.energy * 0.5); // Energy boosts tension effect
+
+                    if (firstPoint) {
+                        mainCtx.moveTo(x + displacement, y);
+                        firstPoint = false;
+                    } else {
+                        mainCtx.lineTo(x + displacement, y);
+                    }
+                }
+                mainCtx.stroke();
+
+                 // Dramatic Glow Effect
+                if (thread.energy > 0.05) {
+                    mainCtx.globalCompositeOperation = 'lighter'; // Bright addition
+                    // Inner, brighter glow (orange/red)
+                    mainCtx.lineWidth = thread.width * 0.8;
+                    mainCtx.strokeStyle = `hsla(${hue + 15}, ${saturation + 10}%, ${lightness + 20}%, ${thread.energy * 0.5})`;
+                    mainCtx.stroke();
+
+                     // Outer, wider, slightly different color glow (maybe magenta/red)
+                     if (thread.energy > 0.3) {
+                          mainCtx.lineWidth = thread.width * 2.5;
+                          mainCtx.strokeStyle = `hsla(${hue - 10}, ${saturation}%, ${lightness + 10}%, ${thread.energy * 0.2})`;
+                          mainCtx.stroke();
+                     }
+                    mainCtx.globalCompositeOperation = 'source-over';
+                }
+            }
+        }
+
+        // --- Animation Loop & Setup ---
+
+        function animate(currentTime) {
+             animationFrameId = requestAnimationFrame(animate);
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            if (!isPaused) {
+                waveTime += waveSpeed;
+                updateThreads();
+                if (cameraEnabled) {
+                    processCameraFeed(currentTime);
+                }
+                drawScene();
+                updateSlitScan();
+            }
+        }
+
+        function updateParametersFromSliders() {
+            const speedVal = parseInt(document.getElementById('speed-slider').value) / 100;
+            const decayVal = parseInt(document.getElementById('decay-slider').value) / 100; // Falloff
+            const resonanceVal = parseInt(document.getElementById('resonance-slider').value) / 100; // Power
+
+             // Adjust ranges for potency
+             waveSpeed = 0.005 + speedVal * 0.035; // Range 0.005 to 0.04
+             slitSpeed = 0.3 + speedVal * 1.5;
+
+             baseDecay = 0.93 + decayVal * 0.065; // Range 0.93 (fast falloff) to 0.995 (long waves)
+             baseResonance = 0.1 + resonanceVal * 0.6; // Range 0.1 (weak spread) to 0.7 (powerful spread)
+
+             for (let thread of threads) {
+                 thread.decay = Math.max(0.90, Math.min(0.998, baseDecay + (Math.random() - 0.5) * 0.02));
+                 thread.resonance = Math.max(0.05, Math.min(0.8, baseResonance + (Math.random() - 0.5) * 0.1));
+             }
+             // Update audio parameters if needed (e.g., delay time based on speed?)
+             if (isAudioInitialized && delay) {
+                 delay.delayTime.linearRampToValue(0.1 + (1 - speedVal) * 0.6, 0.1); // Faster speed = shorter delay
+             }
+         }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', resizeCanvases);
+
+             // Use pointer events for unified touch/mouse
+             mainCanvas.addEventListener('pointerdown', (e) => {
+                 if (!cameraEnabled) {
+                     e.preventDefault();
+                     mainCanvas.setPointerCapture(e.pointerId);
+                     // Stronger initial press
+                     addDisturbance(e.clientX, e.clientY, 45, 1.0);
+                 }
+             });
+
+             mainCanvas.addEventListener('pointermove', (e) => {
+                 if (!cameraEnabled && e.buttons === 1 && mainCanvas.hasPointerCapture(e.pointerId)) {
+                      e.preventDefault();
+                      // Stronger drag effect
+                     addDisturbance(e.clientX, e.clientY, 35, 0.8);
+                 }
+             });
+
+              // Release pointer capture on up/cancel
+              const releasePointer = (e) => {
+                  if (mainCanvas.hasPointerCapture(e.pointerId)) {
+                      mainCanvas.releasePointerCapture(e.pointerId);
+                  }
+              };
+              mainCanvas.addEventListener('pointerup', releasePointer);
+              mainCanvas.addEventListener('pointercancel', releasePointer);
+              mainCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+
+            // Button controls
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                threads.forEach(t => t.energy = 0);
+                initSlitHistory();
+            });
+
+            document.getElementById('sound-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('sound-btn');
+                if (!isAudioInitialized && audioContext && audioContext.state === 'suspended') {
+                     // Try to resume if suspended
+                     console.log("Attempting to resume suspended AudioContext...");
+                     const success = await initAudio(); // This now handles resume internally
+                     if (!success) {
+                         btn.textContent = "Sound Error";
+                         btn.classList.remove('active');
+                         alert("Could not start audio. Please check browser permissions or try reloading.");
+                     }
+                 } else if (!soundEnabled || !isAudioInitialized) {
+                    // Try full initialization
+                    const success = await initAudio();
+                    if (!success && !audioContext) { // Check if context creation failed entirely
+                        btn.textContent = "Sound Error";
+                        btn.classList.remove('active');
+                     } else if (!success) {
+                         // Context exists but is suspended or setup failed
+                         btn.textContent = "Enable Sound"; // Keep button ready for another try
+                         btn.classList.remove('active');
+                         if (audioContext?.state === 'suspended') {
+                             alert("Audio needs interaction to start. Click again maybe?");
+                         }
+                     }
+                 } else {
+                    // Disable sound (mute)
+                    if (audioContext && masterGain) {
+                         masterGain.gain.cancelScheduledValues(audioContext.currentTime);
+                         masterGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+                    }
+                    soundEnabled = false;
+                    btn.textContent = "Enable Sound";
+                    btn.classList.remove('active');
+                }
+            });
+
+            document.getElementById('camera-btn').addEventListener('click', () => {
+                if (!cameraEnabled) initCamera(); else disableCamera();
+            });
+
+            document.getElementById('fullscreen-btn').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => console.error(`Fullscreen error: ${err.message}`));
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+             uiToggleButton.addEventListener('click', () => {
+                 const isHidden = controlsPanel.classList.toggle('hidden');
+                 infoPanel.classList.toggle('hidden', isHidden);
+                 uiToggleButton.textContent = isHidden ? '~' : 'x';
+             });
+
+            // Sliders
+            document.getElementById('speed-slider').addEventListener('input', updateParametersFromSliders);
+            document.getElementById('decay-slider').addEventListener('input', updateParametersFromSliders);
+            document.getElementById('resonance-slider').addEventListener('input', updateParametersFromSliders);
+        }
+
+        function init() {
+            resizeCanvases();
+            setupEventListeners();
+            controlsPanel.classList.add('hidden');
+            infoPanel.classList.add('hidden');
+            uiToggleButton.textContent = '~';
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            lastTime = performance.now();
+            animate(lastTime);
+            console.log("Ocean Loom (Wine-Dark Sea) Initialized.");
+             // Prompt user if audio is suspended after load
+             setTimeout(() => {
+                 if (!isAudioInitialized && audioContext && audioContext.state === 'suspended') {
+                     console.log("Audio Context is suspended. Waiting for user interaction on 'Enable Sound' button.");
+                     // Maybe update the button text here slightly?
+                     // document.getElementById('sound-btn').textContent = "Start Sound";
+                 }
+             }, 500);
+        }
+
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>

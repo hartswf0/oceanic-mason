@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobode - Ritual Loom [Forged]</title>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <!-- Tone.js will be loaded dynamically -->
+    <style>
+        :root {
+            --bg-color: #0b080e; /* Deep void */
+            --text-color: rgba(170, 150, 175, 0.6); /* Muted, slightly purple */
+            --control-bg: rgba(25, 18, 30, 0.88);
+            --control-border: rgba(90, 70, 100, 0.4);
+            --button-bg: rgba(55, 40, 65, 0.8);
+            --button-hover-bg: rgba(75, 55, 85, 0.9);
+            --button-active-border: rgba(150, 110, 160, 0.7);
+            --slider-track: rgba(90, 70, 100, 0.4);
+            --slider-thumb: rgba(150, 110, 160, 0.8);
+            --info-opacity: 0.4;
+            --thread-base-l: 10%; /* Even darker threads */
+            --thread-active-l-boost: 8%;
+            --thread-glow-color: hsla(340, 50%, 60%, 0.5); /* Subtle magenta/red glow */
+            --overlay-color-rgb: 195, 190, 205; /* Base RGB for smoke */
+            --border-color: #2a1f1a; /* Dark wood/rusted metal */
+            --border-highlight: rgba(70, 55, 45, 0.5);
+            --border-shadow: rgba(0, 0, 0, 0.3);
+            --border-height: 35px; /* Prominent border */
+        }
+        html, body { margin:0; padding:0; overflow:hidden; height: 100%; width: 100%; }
+        body { background-color: var(--bg-color); display:flex; font-family:'Courier New', monospace; color: var(--text-color); }
+        .container { position: relative; width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); /* Ensure bg under canvas */ }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; image-rendering: optimizeSpeed; /* May help perf on simple draws */ }
+        #main-canvas { z-index: 1; /* Background elements */ }
+        #wave-canvas { z-index: 2; opacity: 0.85; mix-blend-mode: screen; pointer-events: none; /* Critical: Allows interaction with main */ }
+
+        /* UI Styles - Minimalist, hidden by default */
+        .controls { position: absolute; bottom: 15px; left: 15px; z-index: 10; background: var(--control-bg); padding: 10px 15px; border-radius: 4px; font-size: 11px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; transition: transform .35s ease-out, opacity .35s ease-out; border: 1px solid var(--control-border); backdrop-filter: blur(3px); }
+        .controls.hidden { transform: translateY(100%) translateY(15px); opacity: 0; pointer-events: none; }
+        .controls button { background: var(--button-bg); color: inherit; border: 1px solid var(--control-border); padding: 5px 9px; margin: 0; cursor: pointer; border-radius: 3px; transition: background-color 0.2s, border-color 0.2s; font-size: inherit; }
+        .controls button:hover { background: var(--button-hover-bg); border-color: rgba(120, 100, 130, 0.6); }
+        .voice-button { opacity: .5; }
+        .voice-button.active { opacity: 1; border-color: var(--button-active-border); background-color: rgba(80, 60, 90, 0.85); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; gap: 3px; margin: 0 5px; }
+        .slider-container span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .slider { appearance: none; -webkit-appearance: none; width: 75px; height: 3px; background: var(--slider-track); border-radius: 1.5px; cursor: pointer; padding: 5px 0; /* Increase touch area */ }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; }
+        .slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--slider-thumb); cursor: pointer; border: none; }
+
+        /* Info Text & Toggles */
+        .title { position: absolute; top: var(--border-height); margin-top: 10px; /* Position below border */ left: 15px; font-size: 14px; opacity: var(--info-opacity); z-index: 10; transition: opacity .3s ease; pointer-events: none; font-weight: normal; letter-spacing: 1px; }
+        .instructions { position: absolute; bottom: 15px; right: 15px; font-size: 11px; opacity: var(--info-opacity); z-index: 10; text-align: right; transition: opacity .3s ease; max-width: 220px; pointer-events: none; line-height: 1.4; }
+        .title.hidden, .instructions.hidden { opacity: 0; }
+        .toggle-ui, .fullscreen-btn { position: absolute; top: 10px; z-index: 20; background: var(--button-bg); border: 1px solid var(--control-border); color: inherit; opacity: 0.8; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; cursor: pointer; border-radius: 50%; font-size: 16px; transition: background .3s, opacity .3s; }
+        .toggle-ui { right: 15px; }
+        .fullscreen-btn { right: 53px; }
+        .toggle-ui:hover, .fullscreen-btn:hover { background: var(--button-hover-bg); opacity: 1; }
+
+        /* Subtle Letterbox effect */
+        /* body::before, body::after { content: ''; position: absolute; left: 0; right: 0; height: 1.5vh; background: #000; z-index: 50; pointer-events: none; }
+        body::before { top: 0; }
+        body::after { bottom: 0; } */ /* Optional - uncomment for letterbox */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="main-canvas"></canvas>   <!-- Threads, Border -->
+        <canvas id="wave-canvas"></canvas>   <!-- Noise Overlay -->
+
+        <div class="title hidden">Nobode</div> <!-- Initially hidden -->
+        <div class="instructions hidden">Loading Ritual...</div> <!-- Initially hidden -->
+
+        <div class="controls hidden"> <!-- Start hidden -->
+            <!-- <button id="resetBtn" title="Reset Energy Field">Reset</button> --> <!-- Reset less necessary now -->
+            <button id="soundBtn" title="Toggle Audio Output">Enable Sound</button>
+            <button id="pauseBtn" title="Pause/Resume Simulation">Pause</button>
+            <!-- Seed button removed as CA is gone -->
+            <br>
+            <button class="voice-button active" data-voice="high" title="Toggle High Voice (Plucks)">High</button>
+            <button class="voice-button active" data-voice="mid" title="Toggle Mid Voice (Plucks)">Mid</button>
+            <button class="voice-button active" data-voice="low" title="Toggle Low Voice (Plucks)">Low</button>
+            <button class="voice-button active" data-voice="drone" title="Toggle Ambient Drone Layer">Drone</button>
+            <button class="voice-button active" data-voice="memory" title="Toggle Memory Echoes">Echoes</button>
+
+             <div class="slider-container"><span title="Speed of the overlay animation">Flow</span><input type="range" min="0" max="100" value="25" class="slider" id="speedSlider"></div>
+             <div class="slider-container"><span title="How long energy/smoke lingers">Persistence</span><input type="range" min="0" max="100" value="85" class="slider" id="decaySlider"></div>
+             <div class="slider-container"><span title="Size of the interaction effect">Impact</span><input type="range" min="0" max="100" value="30" class="slider" id="disturbanceSlider"></div>
+            <div class="slider-container"><span title="Amount of reverb effect">Resonance</span><input type="range" min="0" max="100" value="65" class="slider" id="reverbSlider"></div>
+        </div>
+        <button class="toggle-ui" title="Toggle Controls Panel">::</button>
+        <button class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+    </div>
+
+    <script type="module"> // IMPORTANT: type="module"
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // --- Logging Utility ---
+        const LOG_LEVEL = { DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+        const currentLogLevel = LOG_LEVEL.INFO; // Set to DEBUG for more verbose logs
+        const log = (level, prefix, ...args) => { if (level >= currentLogLevel) { const s=level===LOG_LEVEL.ERROR?'color:red;font-weight:bold;':level===LOG_LEVEL.WARN?'color:orange;':''; console.log(`%c[${prefix}]`,s,...args);}};
+
+        log(LOG_LEVEL.INFO, 'SCRIPT', 'Executing Script Module.');
+
+        // --- Canvas Setup ---
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d', { alpha: false }); // No need for alpha on base
+        const waveCanvas = document.getElementById('wave-canvas');
+        const waveCtx = waveCanvas.getContext('2d');
+
+        // --- Noise Generator ---
+        const noise2D = createNoise2D(Math.random);
+        log(LOG_LEVEL.DEBUG, 'CORE', 'Simplex Noise generator ready.');
+
+        // --- Global State ---
+        let isPaused = false, lastTime = 0, animationFrameId = null, frameCounter = 0;
+        let soundEnabled = false, isAudioInitialized = false, audioInitPromise = null;
+
+        // --- Threads (Visual + Sound Mapping) ---
+        const threadCount = 140; // Tuned
+        let threads = [];
+        let threadWidth = 0.8; // Tuned: Even thinner
+        let threadSpacing = 0;
+        const baseThreadLightness = 10; // Tuned: Very dark base from CSS var
+        const energyToLightnessFactor = 5; // Tuned: Extremely subtle brightness change
+
+        // --- Visual Energy & Memory Grids ---
+        let visualEnergyGrid = [], nextVisualEnergyGrid = [];
+        let memoryGrid = [], nextMemoryGrid = []; // For storing echoes
+        let visualEnergyGridWidth = 0, visualEnergyGridHeight = 0;
+        const energyGridResolution = 28; // Tuned
+        let waveTime = Math.random() * 1000; // Drives noise evolution
+        let noiseSpeed = 0.005;   // Tuned: Very slow base drift
+        let noiseScale = 0.007;   // Tuned: Slightly larger features
+        let baseDensity = 0.05;  // Tuned: Very low base smoke
+        let energyToDensityFactor = 4.0; // Tuned: High contrast
+        let energyDecay = 0.982;  // Tuned: High persistence
+        let energySpread = 0.03; // Tuned: Low spread
+        let disturbanceRadiusFactor = 0.45; // Tuned: Smaller base impact size
+        let memoryDecay = 0.998; // Memory fades extremely slowly
+        let memoryPulseInterval = 20 * 1000; // Approx ms between pulses (randomized)
+        let nextMemoryPulseTime = 0;
+        let memoryPulseStrength = 0.08; // How much energy a pulse adds back
+
+        // --- Sound System (Tone.js) ---
+        let Tone = window.Tone;
+        let reverb = null, delay = null, masterLimiter = null;
+        let synths = { high: null, mid: null, low: null };
+        let drone = { noise: null, filter: null, gain: null, lfo: null }; // Drone components
+        let memoryPlayer = null; // Potential: Simple pitched noise for echoes
+        let voiceStates = { high: true, mid: true, low: true, drone: true, memory: true };
+        const scales = { // C Pentatonic Minor - more open sounding
+            high: ['C5', 'Eb5', 'G5', 'Bb5', 'C6', 'Eb6'],
+            mid: ['C4', 'Eb4', 'G4', 'Bb4', 'C5', 'Eb5'],
+            low: ['C3', 'Eb3', 'G3', 'Bb3', 'C4', 'Eb4']
+        };
+
+        // --- UI Elements ---
+        let controlsPanel, titleElement, instructionsElement, uiToggleButton, fullscreenButton;
+
+        // --- Initialization Functions ---
+
+        function setupUIReferences() { /* Get UI elements */ controlsPanel = document.querySelector('.controls'); titleElement = document.querySelector('.title'); instructionsElement = document.querySelector('.instructions'); uiToggleButton = document.querySelector('.toggle-ui'); fullscreenButton = document.querySelector('.fullscreen-btn'); log(LOG_LEVEL.DEBUG, 'UI', 'UI references set.'); setInstructions("Initializing Ritual..."); }
+        function setInstructions(text) { if (instructionsElement) instructionsElement.textContent = text; }
+
+        function resizeCanvas() {
+            // Debounced resize logic... (previous version was good)
+            log(LOG_LEVEL.INFO, 'CORE', "Resize detected.");
+            const container = document.querySelector('.container');
+            if (!container) { log(LOG_LEVEL.ERROR, 'CORE', "Container not found!"); return; }
+            const width = container.offsetWidth;
+            const height = container.offsetHeight;
+            if (width === mainCanvas.width && height === mainCanvas.height && width > 0) {
+                log(LOG_LEVEL.DEBUG, 'CORE', "Skipping resize, dimensions unchanged.");
+                return;
+            }
+            if(width <= 0 || height <= 0) {
+                 log(LOG_LEVEL.WARN, 'CORE', "Invalid dimensions on resize attempt.", {width, height});
+                 return; // Don't proceed with invalid dimensions
+            }
+
+            log(LOG_LEVEL.INFO, 'CORE', `Resizing canvas to ${width}x${height}`);
+            mainCanvas.width = width; mainCanvas.height = height;
+            waveCanvas.width = width; waveCanvas.height = height;
+
+            initThreads(); // Depends on width
+            initEnergyAndMemoryGrids(); // Depends on size
+
+            // Draw immediately
+            requestAnimationFrame(() => {
+                 if (!isPaused) { drawStaticElements(); drawWaveOverlay(); }
+             });
+            log(LOG_LEVEL.INFO, 'CORE', "Canvas resized and grids reinitialized.");
+        }
+
+        function initThreads() {
+             log(LOG_LEVEL.DEBUG, 'VISUAL', `Initializing ${threadCount} threads...`);
+             threads = [];
+             if (mainCanvas.width <= 0) { log(LOG_LEVEL.WARN, 'VISUAL', "Cannot init threads, canvas width is 0."); return; }
+             threadSpacing = mainCanvas.width / (threadCount + 1);
+             const baseHue = 350; // Slightly more towards magenta/wine
+             for (let i = 0; i < threadCount; i++) {
+                 const swaySpeed = 0.1 + Math.random() * 0.2;
+                 const swayAmount = 0.6 + Math.random() * 0.8; // Subtle sway max pixels
+                 threads.push({
+                     x: (i + 1) * threadSpacing,
+                     width: threadWidth * (0.85 + Math.random() * 0.3), // More width variation
+                     baseHue: baseHue + (Math.random() - 0.5) * 12,
+                     baseSaturation: 25 + Math.random() * 10, // Low saturation
+                     // Sway parameters
+                     swayOffset: Math.random() * Math.PI * 2,
+                     swaySpeed: swaySpeed,
+                     swayAmount: swayAmount,
+                     // Sound
+                     lastPlayTime: 0,
+                     cooldown: 550 + Math.random() * 450, // Tuned
+                     energyThreshold: 0.50 + Math.random() * 0.15, // Tuned
+                     glowing: false
+                 });
+             }
+             if (isAudioInitialized) assignSoundToThreads();
+        }
+
+        function initEnergyAndMemoryGrids() {
+            log(LOG_LEVEL.DEBUG, 'CORE', "Initializing Energy and Memory grids...");
+            visualEnergyGridWidth = Math.ceil(mainCanvas.width / energyGridResolution);
+            visualEnergyGridHeight = Math.ceil(mainCanvas.height / energyGridResolution);
+            if (visualEnergyGridWidth <= 0 || visualEnergyGridHeight <= 0) { log(LOG_LEVEL.WARN, 'CORE', "Cannot init grids, invalid dimensions."); return; }
+            visualEnergyGrid = []; nextVisualEnergyGrid = [];
+            memoryGrid = []; nextMemoryGrid = []; // Init memory grid too
+            for (let y = 0; y < visualEnergyGridHeight; y++) {
+                visualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                nextVisualEnergyGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                memoryGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+                nextMemoryGrid[y] = new Array(visualEnergyGridWidth).fill(0);
+            }
+        }
+
+        // --- Tone.js Loading and Audio Initialization ---
+        function preloadTone() { /* Same as previous - robust check */ if(!audioInitPromise){log(LOG_LEVEL.INFO,'AUDIO',"Preloading Tone.js...");audioInitPromise=new Promise((res,rej)=>{if(window.Tone?.start){log(LOG_LEVEL.INFO,'AUDIO',"Tone already available.");Tone=window.Tone;res();return;}const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js';s.async=true;s.onload=()=>{if(window.Tone?.start){log(LOG_LEVEL.INFO,'AUDIO',"Tone loaded via script.");Tone=window.Tone;res();}else{log(LOG_LEVEL.ERROR,'AUDIO',"Tone script loaded but Tone object invalid.");rej(new Error("Tone invalid after load."));}};s.onerror=err=>{log(LOG_LEVEL.ERROR,'AUDIO',"Failed to load Tone script:",err);rej(err);};document.head.appendChild(s);});}return audioInitPromise;}
+        async function initAudio() {
+            if (isAudioInitialized) return true;
+            log(LOG_LEVEL.INFO, 'AUDIO', "Attempting full audio initialization...");
+            setInstructions("Conjuring sound...");
+
+            try {
+                await preloadTone();
+                if (!Tone) throw new Error("Tone.js failed to become available.");
+
+                if (Tone.context.state !== 'running') {
+                    log(LOG_LEVEL.INFO, 'AUDIO', `Context state: '${Tone.context.state}'. Calling Tone.start()...`);
+                    await Tone.start(); // Requires user gesture (button click)
+                    log(LOG_LEVEL.INFO, 'AUDIO', `Context started. State: '${Tone.context.state}'`);
+                }
+
+                // Master Limiter for safety
+                masterLimiter = new Tone.Limiter(-3).toDestination(); // Limit output to -3dB
+
+                // Setup Effects Chain: Source -> Delay -> Reverb -> Limiter -> Destination
+                reverb = new Tone.Reverb({ decay: 4.5, preDelay: 0.018, wet: 0.60 }).connect(masterLimiter); // Tuned
+                await reverb.generate();
+                delay = new Tone.FeedbackDelay({ delayTime: "4n", feedback: 0.35, wet: 0.28 }).connect(reverb); // Dotted quarter note delay, more feedback/wet
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Effects chain ready (Delay->Reverb->Limiter).");
+
+                // Create Synths (Plucks) - connect to Delay
+                synths.high = new Tone.PluckSynth({ attackNoise: 0.5, dampening: 4000, resonance: 0.92, release: 0.9, volume: -20 }).connect(delay); // Sharper high
+                synths.mid = new Tone.PluckSynth({ attackNoise: 0.7, dampening: 3200, resonance: 0.90, release: 1.2, volume: -18 }).connect(delay);
+                synths.low = new Tone.PluckSynth({ attackNoise: 1.0, dampening: 2200, resonance: 0.88, release: 1.8, volume: -16 }).connect(delay); // Longer low
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Pluck Synths created.");
+
+                // Create Drone Layer - connect directly to Reverb for diffusion
+                drone.gain = new Tone.Gain(0).connect(reverb); // Start silent
+                drone.filter = new Tone.Filter(80, "lowpass", -12).connect(drone.gain); // Dark filter
+                drone.noise = new Tone.Noise("brown").connect(drone.filter).start(); // Use brown noise
+                drone.lfo = new Tone.LFO({frequency: 0.03 + Math.random()*0.02, min: 60, max: 120, amplitude: 1}).connect(drone.filter.frequency).start(); // Very slow LFO on filter
+                drone.gain.gain.rampTo(voiceStates.drone ? 0.12 : 0, 5); // Fade in drone gain over 5s if enabled
+                log(LOG_LEVEL.DEBUG, 'AUDIO', "Drone layer created.");
+
+                // Create Memory Echo Player (Simple Noise bursts for now) - connect to Delay
+                 memoryPlayer = new Tone.NoiseSynth({
+                     noise: { type: 'pink' },
+                     envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.2 },
+                     volume: -28 // Very quiet echoes
+                 }).connect(delay);
+                 log(LOG_LEVEL.DEBUG, 'AUDIO', "Memory Echo player created.");
+
+                isAudioInitialized = true; soundEnabled = true; // Enable flag only on success
+                if(document.getElementById('soundBtn')) document.getElementById('soundBtn').textContent = "Sound Off";
+                assignSoundToThreads(); // Map sounds
+                setInstructions("Ritual active. Weave.");
+                log(LOG_LEVEL.INFO, 'AUDIO', "Audio initialization complete.");
+                return true;
+
+            } catch (error) {
+                log(LOG_LEVEL.ERROR, 'AUDIO', "Audio initialization failed:", error);
+                setInstructions(`Sound ritual failed: ${error.message}. Try again?`);
+                isAudioInitialized = false; soundEnabled = false;
+                 if(document.getElementById('soundBtn')) document.getElementById('soundBtn').textContent = "Enable Sound";
+                // Cleanup Tone objects on failure
+                reverb?.dispose(); delay?.dispose(); masterLimiter?.dispose();
+                Object.values(synths).forEach(s => s?.dispose());
+                drone.noise?.dispose(); drone.filter?.dispose(); drone.gain?.dispose(); drone.lfo?.dispose();
+                memoryPlayer?.dispose();
+                // Reset references
+                reverb = null; delay = null; masterLimiter = null; synths = { high: null, mid: null, low: null };
+                drone = { noise: null, filter: null, gain: null, lfo: null }; memoryPlayer = null;
+                return false;
+            }
+        }
+
+        function assignSoundToThreads() { /* Assigns notes from scales */ if (!threads || !isAudioInitialized) return; log(LOG_LEVEL.DEBUG,'AUDIO',"Assigning sounds..."); const third=Math.ceil(threadCount/3); const segSize=Math.max(1,Math.floor(third/scales.high.length)); threads.forEach((t,i)=>{let v,nIB;if(i<third){v='high';nIB=i;}else if(i<third*2){v='mid';nIB=i-third;}else{v='low';nIB=i-third*2;} const sc=scales[v]; if(!sc)return; const nI=Math.min(sc.length-1,Math.floor(nIB/segSize)); t.voice=v; t.note=sc[nI]; }); log(LOG_LEVEL.INFO,'AUDIO',"Sounds assigned."); }
+
+        // --- Core Update Logic ---
+
+        function updateVisualEnergyGridAndMemory() {
+            // Define 'now' at the very beginning of the function scope
+            const now = performance.now();
+
+            if(!visualEnergyGrid || !memoryGrid || visualEnergyGrid.length === 0) return;
+
+            for(let y=0; y<visualEnergyGridHeight; y++) {
+                 if (!visualEnergyGrid[y] || !nextVisualEnergyGrid[y] || !memoryGrid[y] || !nextMemoryGrid[y]) continue; // Row safety check
+                for(let x=0; x<visualEnergyGridWidth; x++) {
+                    let currentEnergy = visualEnergyGrid[y][x] || 0;
+                    let currentMemory = memoryGrid[y][x] || 0;
+                    let spreadEnergy = 0;
+
+                    // Energy spread calculation (4 neighbors)
+                    spreadEnergy += visualEnergyGrid[y-1]?.[x] || 0;
+                    spreadEnergy += visualEnergyGrid[y+1]?.[x] || 0;
+                    spreadEnergy += visualEnergyGrid[y]?.[x-1] || 0;
+                    spreadEnergy += visualEnergyGrid[y]?.[x+1] || 0;
+
+                    // Calculate next visual energy: decay + spread
+                    let nextEnergy = currentEnergy * energyDecay + spreadEnergy * energySpread;
+
+                    // Calculate next memory: decay (very slow) + add current energy
+                    let nextMem = currentMemory * memoryDecay + currentEnergy * (1 - memoryDecay) * 0.5; // Memory slowly accumulates current energy
+
+                    // Apply memory pulse effect (add back energy from memory)
+                    // Now 'now' is defined and accessible here
+                    if (now > nextMemoryPulseTime && currentMemory > 0.1) {
+                         nextEnergy += currentMemory * memoryPulseStrength * (0.5 + Math.random() * 0.5); // Add back randomized amount
+                         // Trigger faint memory sound echo here?
+                         if (memoryPlayer && voiceStates.memory && Math.random() < 0.05) {
+                             const freq = Tone.Midi(Tone.Frequency(scales.mid[Math.floor(Math.random()*scales.mid.length)]).toMidi() + (Math.random()-0.5)*3).toFrequency();
+                             // Use Tone.context.currentTime for scheduling within audio context
+                              try { memoryPlayer.triggerAttackRelease(freq, "16n", Tone.context.currentTime + Math.random()*0.05); } catch(e){} // Schedule noisy echo
+                         }
+                    }
+
+                    // Clamp and store results
+                    nextVisualEnergyGrid[y][x] = Math.max(0, Math.min(1.0, nextEnergy));
+                    nextMemoryGrid[y][x] = Math.max(0, Math.min(1.0, nextMem));
+                }
+            }
+            // Swap grids
+            [visualEnergyGrid, nextVisualEnergyGrid] = [nextVisualEnergyGrid, visualEnergyGrid];
+            [memoryGrid, nextMemoryGrid] = [nextMemoryGrid, memoryGrid];
+
+             // Check if time for next memory pulse - 'now' is already defined
+            if (now > nextMemoryPulseTime) {
+                 log(LOG_LEVEL.DEBUG, 'CORE', "Memory Pulse Triggered");
+                 nextMemoryPulseTime = now + memoryPulseInterval * (0.7 + Math.random() * 0.6); // Randomize next interval
+            }
+        }
+
+        // --- Drawing ---
+        function drawStaticElements() {
+             if (!mainCtx || mainCanvas.width <= 0) return;
+             // Fill background explicitly (useful if main canvas isn't cleared elsewhere)
+             mainCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-color');
+             mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+             // Draw Top Border
+             const borderHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--border-height'));
+             mainCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--border-color');
+             mainCtx.fillRect(0, 0, mainCanvas.width, borderHeight);
+             mainCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--border-shadow');
+             mainCtx.fillRect(0, 0, mainCanvas.width, 2);
+             mainCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--border-highlight');
+             mainCtx.fillRect(0, borderHeight - 2, mainCanvas.width, 2);
+
+             // Draw Threads with Sway
+             mainCtx.lineWidth = threadWidth;
+             const time = performance.now() / 1000; // Time in seconds for sway
+
+             threads.forEach(thread => {
+                 const e = getEnergyAt(thread.x, mainCanvas.height / 2); // Energy affects visual subtly
+                 const glowFactor = thread.glowing ? 1 : 0;
+                 const l = (baseThreadLightness + e * energyToLightnessFactor + glowFactor * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--thread-active-l-boost')));
+                 const s = thread.baseSaturation + glowFactor * 5;
+                 mainCtx.strokeStyle = `hsl(${thread.baseHue}, ${s}%, ${l}%)`;
+                 mainCtx.globalAlpha = 0.4 + e * 0.45 + glowFactor * 0.25; // Tuned alpha
+
+                 // Calculate sway using sine wave based on thread's properties and global time
+                 const swayX = Math.sin(time * thread.swaySpeed + thread.swayOffset) * thread.swayAmount;
+
+                 mainCtx.beginPath();
+                 mainCtx.moveTo(thread.x + swayX, borderHeight); // Apply sway at top
+                 mainCtx.lineTo(thread.x, mainCanvas.height); // Anchor bottom (or apply less sway)
+                 mainCtx.stroke();
+             });
+             mainCtx.globalAlpha = 1.0; // Reset global alpha
+        }
+
+        function drawWaveOverlay() {
+            if (!waveCtx || !visualEnergyGrid || visualEnergyGrid.length === 0 || waveCanvas.width <= 0) return;
+            waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+            const sampleStep = 5; // Tuned sampling step
+            const time = waveTime; // Use evolving noise time offset
+            const overlayColorRGB = getComputedStyle(document.documentElement).getPropertyValue('--overlay-color-rgb').trim();
+
+            for (let y = 0; y < waveCanvas.height; y += sampleStep) {
+                for (let x = 0; x < waveCanvas.width; x += sampleStep) {
+                    // Multiple noise layers for more texture? (Performance cost)
+                    const nVal1 = (noise2D(x * noiseScale, y * noiseScale + time) + 1) / 2; // Base layer
+                    const nVal2 = (noise2D(x * noiseScale * 2.5 + time * 0.5, y * noiseScale * 2.5 - time * 0.3) + 1) / 2; // Finer detail layer
+                    const nVal = nVal1 * 0.7 + nVal2 * 0.3; // Blend layers
+
+                    const lEnergy = getEnergyAt(x, y);
+                    const dens = baseDensity + lEnergy * energyToDensityFactor * nVal;
+                    const alpha = Math.min(0.9, Math.max(0, dens));
+                    if (alpha > 0.01) {
+                        // Apply non-linear alpha curve for better appearance
+                        const displayAlpha = Math.pow(alpha, 1.5) * 0.8; // Tuned curve
+                        waveCtx.fillStyle = `rgba(${overlayColorRGB}, ${displayAlpha})`;
+                        waveCtx.fillRect(x, y, sampleStep, sampleStep);
+                    }
+                }
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate(currentTime) {
+            animationFrameId = requestAnimationFrame(animate);
+            if (!lastTime) lastTime = currentTime;
+
+            try {
+                if (!isPaused) {
+                    waveTime += noiseSpeed; // Drive noise field evolution
+
+                    // No CA update needed
+
+                    updateVisualEnergyGridAndMemory(); // Update visual energy & memory, includes pulsing
+                    updateThreadSounds();              // Check sound triggers based on visual energy
+                }
+
+                // --- Drawing ---
+                drawStaticElements();
+                drawWaveOverlay();
+
+                frameCounter++;
+                if (frameCounter % 300 === 0) { // Log less frequently
+                     log(LOG_LEVEL.DEBUG, 'LOOP', `Frame ${frameCounter}. Paused: ${isPaused}. Audio: ${soundEnabled}/${isAudioInitialized}`);
+                }
+
+            } catch (error) { /* Error handling from previous */ log(LOG_LEVEL.ERROR,'LOOP',"Anim loop error:",error);isPaused=true;if(document.getElementById('pauseBtn'))document.getElementById('pauseBtn').textContent='ERR!';setInstructions("Runtime Error! Check console.");cancelAnimationFrame(animationFrameId);}
+             finally { lastTime = currentTime; }
+        }
+
+        // --- Event Listeners & UI Setup ---
+        function setupEventListeners() {
+             log(LOG_LEVEL.INFO, 'INIT', "Setting up event listeners...");
+             let resizeTimeout; window.addEventListener('resize', () => { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(resizeCanvas, 150); });
+
+             const handlePointerDown=(e)=>{if(!isPaused){e.preventDefault();mainCanvas.style.cursor='grabbing';mainCanvas.setPointerCapture(e.pointerId);addDisturbance(e.clientX,e.clientY,100,1.0);}}; // Increased radius for touch
+             const handlePointerMove=(e)=>{if(!isPaused&&e.buttons===1&&mainCanvas.hasPointerCapture(e.pointerId)){e.preventDefault();addDisturbance(e.clientX,e.clientY,80,0.5);}}; // Slightly less strength on move
+             const releasePointer=(e)=>{mainCanvas.style.cursor='grab';if(mainCanvas.hasPointerCapture(e.pointerId))mainCanvas.releasePointerCapture(e.pointerId);};
+             mainCanvas.style.cursor = 'grab';
+             mainCanvas.addEventListener('pointerdown',handlePointerDown); mainCanvas.addEventListener('pointermove',handlePointerMove); mainCanvas.addEventListener('pointerup',releasePointer); mainCanvas.addEventListener('pointerleave',releasePointer); mainCanvas.addEventListener('pointercancel',releasePointer); mainCanvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+             // Buttons
+             // document.getElementById('resetBtn')?.addEventListener('click', () => { log(LOG_LEVEL.INFO,'UI',"Reset clicked"); initVisualEnergyGrid(); initMemoryGrid(); }); // Simplified reset
+             document.getElementById('pauseBtn')?.addEventListener('click', function() { isPaused = !isPaused; this.textContent = isPaused ? 'Resume' : 'Pause'; log(LOG_LEVEL.INFO, 'UI', `Simulation ${isPaused ? 'Paused' : 'Resumed'}`); });
+             // Seed button removed
+             document.getElementById('soundBtn')?.addEventListener('click', async function() { /* Sound toggle logic - same as previous robust version */ if(!isAudioInitialized&&!soundEnabled){log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked");this.textContent="Loading...";this.disabled=true;const success=await initAudio();if(success){this.textContent="Sound Off";}else{this.textContent="Sound Error";setInstructions("Failed to start audio.");} this.disabled=false;}else if(soundEnabled){log(LOG_LEVEL.INFO,'UI',"Disable Sound clicked");soundEnabled=false;this.textContent="Enable Sound";}else{log(LOG_LEVEL.INFO,'UI',"Enable Sound clicked (Re-enabling)");soundEnabled=true;if(!isAudioInitialized){const s=await initAudio(); if(!s) {soundEnabled=false; this.textContent="Sound Error"; return;}} this.textContent="Sound Off";}});
+             document.querySelectorAll('.voice-button').forEach(b => b.addEventListener('click', function() { const v = this.dataset.voice; if(v){ voiceStates[v]=!voiceStates[v]; this.classList.toggle('active'); log(LOG_LEVEL.INFO,'UI',`Voice ${v} ${voiceStates[v]?'ON':'OFF'}`); if(v==='drone' && drone.gain) drone.gain.gain.linearRampTo(voiceStates.drone ? 0.12 : 0, 1); }})); // Toggle drone gain
+             // Sliders
+             document.getElementById('reverbSlider')?.addEventListener('input', (e) => { if (reverb?.wet) reverb.wet.value = parseInt(e.target.value) / 100; });
+             document.getElementById('speedSlider')?.addEventListener('input', updateParametersFromSliders); document.getElementById('decaySlider')?.addEventListener('input', updateParametersFromSliders); document.getElementById('disturbanceSlider')?.addEventListener('input', updateParametersFromSliders);
+
+             // UI Toggles
+             uiToggleButton?.addEventListener('click', () => { const hidden = controlsPanel.classList.toggle('hidden'); titleElement.classList.toggle('hidden', hidden); instructionsElement.classList.toggle('hidden', hidden); log(LOG_LEVEL.INFO, 'UI', `Controls ${hidden ? 'hidden' : 'shown'}`);});
+             fullscreenButton?.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else document.querySelector('.container')?.requestFullscreen(); log(LOG_LEVEL.INFO, 'UI', `Fullscreen toggled`);} catch(e){ log(LOG_LEVEL.ERROR, 'UI', "Fullscreen error:", e);} });
+             log(LOG_LEVEL.INFO, 'INIT', "Event listeners attached.");
+        }
+
+        function updateParametersFromSliders() {
+            try {
+                noiseSpeed = 0.001 + (parseInt(document.getElementById('speedSlider')?.value ?? 25)/100) * 0.015; // Slower range
+                energyDecay = 0.95 + (parseInt(document.getElementById('decaySlider')?.value ?? 85)/100) * 0.048; // Range 0.95 - 0.998
+                disturbanceRadiusFactor = 0.1 + (parseInt(document.getElementById('disturbanceSlider')?.value ?? 30)/100) * 0.8; // Smaller impact range
+                if(isAudioInitialized && reverb?.wet) reverb.wet.value = parseInt(document.getElementById('reverbSlider')?.value ?? 65)/100;
+                log(LOG_LEVEL.DEBUG, 'PARAM', `Params: speed=${noiseSpeed.toFixed(4)}, decay=${energyDecay.toFixed(4)}, impact=${disturbanceRadiusFactor.toFixed(3)}, reverb=${reverb?.wet?.value.toFixed(2)}`);
+            } catch (e) { log(LOG_LEVEL.ERROR, 'PARAM', "Slider update error:", e); }
+         }
+
+        // --- Global Init ---
+        function init() {
+            log(LOG_LEVEL.INFO, 'INIT', "===== Initializing Nobode Ritual Loom =====");
+            try {
+                setupUIReferences();
+                resizeCanvas(); // Initial setup
+                setupEventListeners();
+
+                // Start with UI hidden
+                controlsPanel?.classList.add('hidden');
+                titleElement?.classList.add('hidden');
+                instructionsElement?.classList.add('hidden');
+
+                // Set initial memory pulse time
+                nextMemoryPulseTime = performance.now() + memoryPulseInterval * (0.5 + Math.random());
+
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                frameCounter = 0;
+                lastTime = performance.now();
+                animationFrameId = requestAnimationFrame(animate);
+                log(LOG_LEVEL.INFO, 'INIT', "Initialization complete. Animation loop started.");
+                setInstructions("Click 'Enable Sound', then touch or drag.");
+
+            } catch (error) { /* Error handling from previous */ log(LOG_LEVEL.ERROR,'INIT',"Init failed:",error);setInstructions("Init Error! Check console.");alert(`Init Error: ${error.message}`);}
+        }
+
+        // --- Start ---
+        if (document.readyState === 'loading') { window.addEventListener('DOMContentLoaded', init); } else { init(); }
+
+    </script>
+</body>
+</html>

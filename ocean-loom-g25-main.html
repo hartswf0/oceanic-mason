@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Loom - Conway Depths</title>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js" type="module"></script>
+    <!-- Tone.js Library (loaded dynamically later) -->
+    <style>
+        /* Combined and adapted styles */
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #0a060c; /* Darker base */
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; font-family: 'Courier New', monospace;
+            color: rgba(180, 160, 170, 0.7); /* Muted text */
+        }
+        .container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #main-canvas { z-index: 1; } /* Threads, Border, maybe subtle CA viz */
+        #wave-canvas { z-index: 2; opacity: 0.8; mix-blend-mode: screen; } /* Noise Overlay */
+
+        /* UI Controls (Adapted from Conway Harp, styled for Woven Depths theme) */
+        .controls {
+            position: absolute; bottom: 10px; left: 10px; z-index: 10;
+            background: rgba(25, 20, 22, 0.8); padding: 10px; border-radius: 5px;
+            font-size: 12px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            border: 1px solid rgba(100, 80, 85, 0.3);
+        }
+        .controls.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+        .controls button {
+            background: rgba(60, 45, 50, 0.8); color: rgba(190, 170, 175, 0.9);
+            border: 1px solid rgba(100, 80, 85, 0.5); padding: 5px 10px; margin: 2px;
+            cursor: pointer; border-radius: 3px;
+        }
+        .controls button:hover { background: rgba(80, 65, 70, 0.9); }
+        .voice-button { opacity: 0.6; }
+        .voice-button.active { opacity: 1; border-color: rgba(140, 110, 115, 0.8); }
+        .slider-container { display: flex; flex-direction: column; align-items: center; gap: 3px; margin: 0 5px; }
+        .slider-container span { font-size: 10px; color: rgba(160, 140, 145, 0.6); }
+        .slider { appearance: none; width: 80px; height: 3px; background: rgba(100, 80, 85, 0.3); border-radius: 1.5px; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 50%; background: rgba(140, 110, 115, 0.8); cursor: pointer; }
+
+        /* UI Text & Toggles */
+        .title { position: absolute; top: 10px; left: 10px; font-size: 16px; opacity: 0.4; z-index: 10; transition: opacity 0.3s ease; }
+        .instructions { position: absolute; bottom: 10px; right: 10px; font-size: 12px; opacity: 0.4; z-index: 10; text-align: right; transition: opacity 0.3s ease; }
+        .title.hidden, .instructions.hidden { opacity: 0; }
+        .toggle-ui, .fullscreen-btn {
+            position: absolute; top: 10px; z-index: 20;
+            background: rgba(60, 45, 50, 0.7); border: 1px solid rgba(100, 80, 85, 0.5);
+            color: rgba(190, 170, 175, 0.9); width: 30px; height: 30px;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer; border-radius: 50%; font-size: 16px; transition: background 0.3s;
+        }
+        .toggle-ui { right: 10px; }
+        .fullscreen-btn { right: 50px; }
+        .toggle-ui:hover, .fullscreen-btn:hover { background: rgba(80, 65, 70, 0.9); }
+
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="main-canvas"></canvas>   <!-- Threads, Border, Subtle CA? -->
+        <canvas id="wave-canvas"></canvas>   <!-- Noise Overlay -->
+
+        <div class="title">Ocean Loom - Conway Depths</div>
+        <div class="instructions">Interact to stir the haze and weave sound</div>
+
+        <div class="controls hidden"> <!-- Start hidden -->
+            <button id="resetBtn">Reset CA</button>
+            <button id="soundBtn">Enable Sound</button>
+            <button id="pauseBtn">Pause</button>
+            <button id="seedBtn">New CA Seed</button>
+            <button id="cameraBtn">Camera Mode</button>
+            <br>
+            <button class="voice-button active" data-voice="high">High</button>
+            <button class="voice-button active" data-voice="mid">Mid</button>
+            <button class="voice-button active" data-voice="low">Low</button>
+
+            <div class="slider-container">
+                <span>Flow Speed</span> <!-- Noise speed -->
+                <input type="range" min="0" max="100" value="40" class="slider" id="speedSlider">
+            </div>
+             <div class="slider-container">
+                <span>Density Falloff</span> <!-- Energy decay -->
+                <input type="range" min="0" max="100" value="70" class="slider" id="decaySlider">
+            </div>
+             <div class="slider-container">
+                <span>Disturbance</span> <!-- Energy add radius scale -->
+                <input type="range" min="0" max="100" value="50" class="slider" id="disturbanceSlider">
+            </div>
+            <div class="slider-container">
+                <span>Resonance</span> <!-- Reverb Wet -->
+                <input type="range" min="0" max="100" value="60" class="slider" id="reverbSlider">
+            </div>
+        </div>
+        <button class="toggle-ui">::</button>
+        <button class="fullscreen-btn">⛶</button>
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+
+    <script type="module"> // Enable module for import
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // Canvas Setup
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const waveCanvas = document.getElementById('wave-canvas');
+        const waveCtx = waveCanvas.getContext('2d');
+
+        // Noise Generator
+        const noise2D = createNoise2D();
+
+        // Global State
+        let isPaused = false, lastTime = 0, animationFrameId = null;
+        let soundEnabled = false, isAudioInitialized = false, audioInitPromise = null;
+        let cameraEnabled = false;
+
+        // CA Grid (Conway Harp Loom)
+        let grid = [], nextGrid = [];
+        let cellSize = 5; // Slightly larger cells might perform better
+        let cols, rows;
+        const birthRange = [3, 4], surviveRange = [2, 3, 4]; // CA Rules
+        let caUpdateCounter = 0; // To update CA less frequently
+
+        // Threads (Visual + Sound Mapping)
+        const threadCount = 120; // Fewer threads
+        let threads = [];
+        let threadWidth = 1.2; // Thinner
+        let threadSpacing;
+        const baseThreadLightness = 15;
+        const energyToLightnessFactor = 10; // Very subtle brightening
+
+        // Noise Overlay / Energy Grid (Woven Depths)
+        let waveTime = Math.random() * 1000;
+        let noiseSpeed = 0.008;
+        let noiseScale = 0.004;
+        let baseDensity = 0.1;
+        let energyToDensityFactor = 2.8;
+        let energyGrid = [], energyGridWidth = 0, energyGridHeight = 0;
+        const energyGridResolution = 30; // Lower res grid
+        let energyDecay = 0.96;
+        let energySpread = 0.04;
+        let disturbanceRadiusFactor = 0.5;
+
+        // Camera / Motion
+        const video = document.getElementById('video');
+        let prevImageData = null;
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+        let motionThreshold = 25;
+        let lastProcessedCameraTime = 0;
+        let cameraProcessInterval = 90;
+
+        // --- Sound System (Tone.js - Conway Harp Loom) ---
+        let Tone = window.Tone; // Will be loaded dynamically
+        let reverb, delay;
+        let synths = { high: null, mid: null, low: null };
+        let voiceStates = { high: true, mid: true, low: true };
+        const scales = {
+            high: ['E5', 'G5', 'A5', 'B5', 'D6', 'E6'],
+            mid: ['E4', 'G4', 'A4', 'B4', 'D5', 'E5'],
+            low: ['E2', 'G2', 'A2', 'B2', 'D3', 'E3']
+        };
+        let soundTriggerCounter = 0; // To throttle sound checks
+
+
+        // --- Initialization ---
+
+        function resizeCanvas() {
+            const container = document.querySelector('.container');
+            const width = container.offsetWidth;
+            const height = container.offsetHeight;
+
+            mainCanvas.width = width; mainCanvas.height = height;
+            waveCanvas.width = width; waveCanvas.height = height;
+            offCanvas.width = width; offCanvas.height = height;
+
+            cols = Math.floor(width / cellSize);
+            rows = Math.floor(height / cellSize);
+
+            initGrid(); // Initialize CA grid
+            initThreads(); // Initialize threads (visual + sound map)
+            initEnergyGrid(); // Initialize overlay energy grid
+
+            if (!isPaused) {
+                drawStaticElements();
+                drawWaveOverlay();
+            }
+        }
+
+        function initGrid() { // Initialize CA
+            grid = new Array(cols); nextGrid = new Array(cols);
+            for (let i = 0; i < cols; i++) {
+                grid[i] = new Array(rows); nextGrid[i] = new Array(rows);
+                for (let j = 0; j < rows; j++) {
+                    grid[i][j] = { alive: Math.random() < 0.25, energy: 0, age: 0, changed: false }; // Add 'changed' flag
+                    nextGrid[i][j] = { alive: false, energy: 0, age: 0, changed: false };
+                }
+            }
+        }
+
+        function initThreads() { // Initialize static threads + sound mapping
+            threads = [];
+            threadSpacing = mainCanvas.width / (threadCount + 1);
+            const baseHue = 355; // Crimson
+            for (let i = 0; i < threadCount; i++) {
+                threads.push({
+                    x: (i + 1) * threadSpacing,
+                    width: threadWidth * (0.9 + Math.random() * 0.2),
+                    baseHue: baseHue + (Math.random() - 0.5) * 5,
+                    baseSaturation: 35 + Math.random() * 10,
+                    // Sound properties will be added by assignSoundToThreads
+                    energy: 0, // Local energy from energyGrid
+                    lastPlayTime: 0,
+                    cooldown: 600 + Math.random() * 400, // Longer cooldown
+                    energyThreshold: 0.5 + Math.random() * 0.2,
+                    glowing: false
+                });
+            }
+             updateParametersFromSliders();
+             if(isAudioInitialized) assignSoundToThreads(); // Remap if audio already ready
+        }
+
+        function initEnergyGrid() { // Initialize overlay energy
+            energyGridWidth = Math.ceil(mainCanvas.width / energyGridResolution);
+            energyGridHeight = Math.ceil(mainCanvas.height / energyGridResolution);
+            energyGrid = [];
+            for (let y = 0; y < energyGridHeight; y++) {
+                energyGrid[y] = new Array(energyGridWidth).fill(0);
+            }
+        }
+
+        // --- Tone.js Loading and Audio Initialization ---
+        function preloadTone() { /* Standard Tone.js preload */ if(!audioInitPromise){audioInitPromise=new Promise(resolve=>{if(typeof window.Tone!=='undefined')resolve();else{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js';s.onload=()=>resolve();document.head.appendChild(s);}});}return audioInitPromise;}
+        async function initAudio() {
+            if (isAudioInitialized) return true;
+            try {
+                await preloadTone();
+                Tone = window.Tone; // Assign globally after loading
+                await Tone.start();
+
+                reverb = new Tone.Reverb({ decay: 4, preDelay: 0.015, wet: 0.6 }).toDestination();
+                await reverb.generate();
+                delay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.3, wet: 0.25 }).connect(reverb);
+
+                synths.high = new Tone.PluckSynth({ attackNoise: 0.8, dampening: 3500, resonance: 0.92, release: 1.1, volume: -19 }).connect(delay);
+                synths.mid = new Tone.PluckSynth({ attackNoise: 1, dampening: 2800, resonance: 0.90, release: 1.2, volume: -17 }).connect(delay);
+                synths.low = new Tone.PluckSynth({ attackNoise: 1.2, dampening: 1800, resonance: 0.88, release: 1.6, volume: -14 }).connect(delay);
+
+                isAudioInitialized = true; soundEnabled = true;
+                document.getElementById('soundBtn').textContent = "Sound Off";
+                assignSoundToThreads(); // Assign notes now that synths exist
+                console.log("Tone.js Audio Initialized.");
+                return true;
+            } catch (error) { console.error("Failed to initialize Tone.js audio:", error); return false; }
+        }
+        function assignSoundToThreads() { /* From Conway Harp Loom - assigns voice/note */ if(!threads || threads.length === 0) return; const third = Math.ceil(threadCount / 3); const segmentSize = Math.ceil(third / 6); threads.forEach((thread,i)=>{let voice;let noteIndexBase;if(i<third){voice='high';noteIndexBase=i;}else if(i<third*2){voice='mid';noteIndexBase=i-third;}else{voice='low';noteIndexBase=i-third*2;}const noteIndex=Math.floor(noteIndexBase/segmentSize)%scales[voice].length;thread.voice=voice;thread.note=scales[voice][noteIndex];}); }
+
+
+        // --- Core Update Logic ---
+
+        function countNeighbors(x, y) { /* Standard Conway neighbor count */ let sum=0;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){if(i===0&&j===0)continue;const col=(x+i+cols)%cols,row=(y+j+rows)%rows;if(grid[col][row].alive)sum++;}return sum;}
+        function updateGrid() { // Update CA state
+             for (let i = 0; i < cols; i++) {
+                 for (let j = 0; j < rows; j++) {
+                     const neighbors = countNeighbors(i, j);
+                     const cell = grid[i][j];
+                     const wasAlive = cell.alive;
+
+                     if (wasAlive) { // Survival rules
+                         nextGrid[i][j].alive = surviveRange.includes(neighbors);
+                         nextGrid[i][j].age = cell.age + 1;
+                     } else { // Birth rules
+                         nextGrid[i][j].alive = birthRange.includes(neighbors);
+                         nextGrid[i][j].age = nextGrid[i][j].alive ? 1 : 0;
+                     }
+                     // Track if state changed
+                     nextGrid[i][j].changed = (wasAlive !== nextGrid[i][j].alive);
+                     // Energy decays regardless (will be added by activity)
+                     nextGrid[i][j].energy = cell.energy * 0.85; // Faster decay for CA internal energy
+                 }
+             }
+             [grid, nextGrid] = [nextGrid, grid]; // Swap grids
+        }
+
+        function updateEnergyFromCA() { // Add energy to overlay grid based on CA activity
+            const energyToAdd = 0.08; // Amount of energy added per active/changed cell
+             for (let i = 0; i < cols; i++) {
+                 for (let j = 0; j < rows; j++) {
+                     if (grid[i][j].alive || grid[i][j].changed) { // Add energy if cell is alive OR just changed state
+                         const gridX = Math.floor(i * cellSize / energyGridResolution);
+                         const gridY = Math.floor(j * cellSize / energyGridResolution);
+                         if (gridY >= 0 && gridY < energyGridHeight && gridX >= 0 && gridX < energyGridWidth) {
+                             energyGrid[gridY][gridX] = Math.min(1.0, energyGrid[gridY][gridX] + energyToAdd);
+                         }
+                         // Reset changed flag after processing
+                         grid[i][j].changed = false;
+                     }
+                 }
+             }
+        }
+
+        function updateEnergyGrid() { /* From Woven Depths - decay/spread overlay energy */ let nextGridE = []; for(let y=0;y<energyGridHeight;y++)nextGridE[y]=new Array(energyGridWidth).fill(0); for(let y=0;y<energyGridHeight;y++)for(let x=0;x<energyGridWidth;x++){let currentE=energyGrid[y][x],spreadE=0;if(y>0)spreadE+=energyGrid[y-1][x];if(y<energyGridHeight-1)spreadE+=energyGrid[y+1][x];if(x>0)spreadE+=energyGrid[y][x-1];if(x<energyGridWidth-1)spreadE+=energyGrid[y][x+1];let newE=currentE*energyDecay+spreadE*energySpread;nextGridE[y][x]=Math.max(0,Math.min(1.0,newE));} energyGrid = nextGridE; }
+        function getEnergyAt(x, y) { /* From Woven Depths - interpolated lookup */ const gXf=x/energyGridResolution,gYf=y/energyGridResolution,gX0=Math.floor(gXf),gY0=Math.floor(gYf),gX1=gX0+1,gY1=gY0+1; if(gY0<0||gY1>=energyGridHeight||gX0<0||gX1>=energyGridWidth)return 0; const tx=gXf-gX0,ty=gYf-gY0; const e00=energyGrid[gY0][gX0],e10=energyGrid[gY0][gX1],e01=energyGrid[gY1][gX0],e11=energyGrid[gY1][gX1]; const ex0=e00+(e10-e00)*tx,ex1=e01+(e11-e01)*tx; return ex0+(ex1-ex0)*ty; }
+
+        function updateThreadSounds() { // Trigger Tone.js sounds based on overlay energy
+            if (!soundEnabled || !isAudioInitialized) return;
+
+             // Throttle checks: Only process 1/3 of threads per frame
+            const threadsPerFrame = Math.ceil(threads.length / 3);
+            const startIdx = (soundTriggerCounter * threadsPerFrame) % threads.length;
+            soundTriggerCounter = (soundTriggerCounter + 1) % 3;
+
+            const now = Tone.now(); // Use Tone.now() for scheduling
+
+            for (let i = startIdx; i < startIdx + threadsPerFrame && i < threads.length; i++) {
+                 const thread = threads[i];
+                 if (!thread.voice || !voiceStates[thread.voice]) continue; // Skip if no voice assigned or voice muted
+
+                 // Get energy from the overlay grid under this thread
+                 thread.energy = getEnergyAt(thread.x, mainCanvas.height / 2); // Sample energy at midpoint Y
+
+                 if (thread.energy > thread.energyThreshold && now >= thread.lastPlayTime + thread.cooldown / 1000) {
+                     const velocity = Math.min(0.8, 0.2 + thread.energy * 0.6);
+                     try {
+                         // Schedule note slightly ahead using Tone.js time
+                         synths[thread.voice].triggerAttack(thread.note, now + 0.05, velocity);
+                     } catch (e) { console.warn("Tone trigger error:", e); }
+                     thread.lastPlayTime = now;
+                     thread.glowing = true;
+                     setTimeout(() => { thread.glowing = false; }, 250); // Shorter glow
+                 }
+                 // Decay internal energy slightly (visual effect only)
+                 // thread.energy *= 0.98; // Let getEnergyAt handle the source energy
+                 if(thread.energy < 0.1) thread.glowing = false;
+            }
+        }
+
+
+        // --- Interaction ---
+        function addDisturbance(x, y, radius = 10, strength = 1) {
+             // 1. Add energy to the overlay grid (visual effect)
+             const gridX = Math.floor(x / energyGridResolution);
+             const gridY = Math.floor(y / energyGridResolution);
+             const gridRadius = Math.ceil(radius / energyGridResolution * disturbanceRadiusFactor);
+             for(let dy=-gridRadius;dy<=gridRadius;dy++)for(let dx=-gridRadius;dx<=gridRadius;dx++){const gx=gridX+dx,gy=gridY+dy;if(gy>=0&&gy<energyGridHeight&&gx>=0&&gx<energyGridWidth){const dist=Math.sqrt(dx*dx+dy*dy);if(dist<=gridRadius){const falloff=Math.pow(1-dist/gridRadius,1.5);const impact=strength*falloff*0.6;energyGrid[gy][gx]=Math.min(1.0,energyGrid[gy][gx]+impact);}}}
+
+             // 2. Trigger immediate sound (find closest thread)
+             if (soundEnabled && isAudioInitialized) {
+                 let closestIdx = -1, minDistance = Infinity;
+                 threads.forEach((thread, idx) => { const d = Math.abs(thread.x - x); if (d < minDistance) { minDistance = d; closestIdx = idx; } });
+
+                 if (closestIdx !== -1 && minDistance < threadSpacing * 2) { // Only trigger if reasonably close
+                     const thread = threads[closestIdx];
+                     if (thread.voice && voiceStates[thread.voice]) {
+                         const now = Tone.now();
+                         if (now >= thread.lastPlayTime + thread.cooldown / 1000 * 0.5) { // Shorter cooldown for direct interaction
+                             const velocity = Math.min(0.9, 0.4 + strength * 0.5);
+                             try { synths[thread.voice].triggerAttack(thread.note, now + 0.01, velocity); } catch(e) {}
+                             thread.lastPlayTime = now;
+                             thread.glowing = true;
+                             setTimeout(() => { thread.glowing = false; }, 250);
+                         }
+                     }
+                 }
+             }
+
+             // 3. Optionally, slightly disturb the CA grid (e.g., flip a few cells)
+             const caGridX = Math.floor(x / cellSize);
+             const caGridY = Math.floor(y / cellSize);
+              const disturbRadiusCA = 2;
+              for(let i=-disturbRadiusCA; i<=disturbRadiusCA; i++) for(let j=-disturbRadiusCA; j<=disturbRadiusCA; j++){
+                  const cCol = (caGridX + i + cols)%cols;
+                  const cRow = (caGridY + j + rows)%rows;
+                  if(Math.random() < 0.1 * strength) { // Small chance to flip state
+                      grid[cCol][cRow].alive = !grid[cCol][cRow].alive;
+                      grid[cCol][cRow].changed = true; // Mark as changed to add energy next frame
+                  }
+              }
+        }
+
+
+        // --- Drawing ---
+
+        function drawStaticElements() { // Draws border and static threads
+             mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+             // Draw Top Border (simple version)
+             const borderHeight = 25;
+             mainCtx.fillStyle = '#302025'; mainCtx.fillRect(0, 0, mainCanvas.width, borderHeight);
+             mainCtx.fillStyle = 'rgba(0,0,0,0.2)'; mainCtx.fillRect(0,0,mainCanvas.width, 3);
+             mainCtx.fillStyle = 'rgba(60,40,45,0.4)'; mainCtx.fillRect(0, borderHeight-3, mainCanvas.width, 3);
+
+             // Draw Threads
+             mainCtx.lineWidth = threadWidth;
+             threads.forEach(thread => {
+                 const threadEnergy = getEnergyAt(thread.x, mainCanvas.height / 2); // Use overlay energy for subtle visual effect
+                 const lightness = baseThreadLightness + threadEnergy * energyToLightnessFactor + (thread.glowing ? 15 : 0);
+                 const saturation = thread.baseSaturation + (thread.glowing ? 10 : 0);
+                 mainCtx.strokeStyle = `hsl(${thread.baseHue}, ${saturation}%, ${lightness}%)`;
+                 mainCtx.globalAlpha = 0.6 + threadEnergy * 0.3 + (thread.glowing ? 0.2 : 0); // Fade in slightly with energy/glow
+
+                 mainCtx.beginPath();
+                 mainCtx.moveTo(thread.x, borderHeight);
+                 mainCtx.lineTo(thread.x, mainCanvas.height);
+                 mainCtx.stroke();
+             });
+             mainCtx.globalAlpha = 1.0; // Reset alpha
+        }
+
+        function drawWaveOverlay() { /* From Woven Depths - draws noise field */ waveCtx.clearRect(0,0,waveCanvas.width,waveCanvas.height);const sampleStep=4,time=waveTime;for(let y=0;y<waveCanvas.height;y+=sampleStep){for(let x=0;x<waveCanvas.width;x+=sampleStep){const noiseVal=(noise2D(x*noiseScale,y*noiseScale+time)+1)/2;const localEnergy=getEnergyAt(x,y);const density=baseDensity+localEnergy*energyToDensityFactor*noiseVal;const alpha=Math.min(0.85,Math.max(0,density));if(alpha>0.01){waveCtx.fillStyle=`rgba(180,175,178,${alpha*alpha})`;waveCtx.fillRect(x,y,sampleStep,sampleStep);}}} }
+
+
+        // --- Animation Loop ---
+        function animate(currentTime) {
+            animationFrameId = requestAnimationFrame(animate);
+            // Simple frame skipping if needed (can make jerky)
+            // if (lastTime && currentTime - lastTime < 25) { return; } // Limit to ~40fps
+
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            if (!isPaused) {
+                waveTime += noiseSpeed; // Update noise time
+
+                // Update CA less often
+                caUpdateCounter++;
+                if (caUpdateCounter >= 2) { // Update CA every 2 animation frames
+                    updateGrid();
+                    updateEnergyFromCA(); // Link CA activity to overlay energy
+                    caUpdateCounter = 0;
+                }
+
+                updateEnergyGrid(); // Decay/spread overlay energy every frame
+                updateThreadSounds(); // Check sound triggers (internally throttled)
+
+                if (cameraEnabled) processCameraFeed(currentTime); // Process camera
+            }
+
+            // --- Drawing ---
+            drawStaticElements(); // Threads/Border
+            drawWaveOverlay();    // Smoky overlay
+        }
+
+        // --- Event Listeners & UI Setup ---
+        function setupEventListeners() { /* Combined listeners */
+             window.addEventListener('resize', resizeCanvas);
+             // Pointer events (Mouse/Touch)
+             mainCanvas.addEventListener('pointerdown', (e) => { if (!cameraEnabled) { e.preventDefault(); mainCanvas.setPointerCapture(e.pointerId); addDisturbance(e.clientX, e.clientY, 80, 0.9); } });
+             mainCanvas.addEventListener('pointermove', (e) => { if (!cameraEnabled && e.buttons === 1 && mainCanvas.hasPointerCapture(e.pointerId)) { e.preventDefault(); addDisturbance(e.clientX, e.clientY, 60, 0.5); } });
+             const releasePointer = (e) => { if (mainCanvas.hasPointerCapture(e.pointerId)) mainCanvas.releasePointerCapture(e.pointerId); };
+             mainCanvas.addEventListener('pointerup', releasePointer); mainCanvas.addEventListener('pointercancel', releasePointer); mainCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+             // Button Controls
+             document.getElementById('resetBtn').addEventListener('click', () => { initGrid(); initEnergyGrid(); }); // Reset CA and energy
+             document.getElementById('pauseBtn').addEventListener('click', function() { isPaused = !isPaused; this.textContent = isPaused ? 'Resume' : 'Pause'; });
+             document.getElementById('seedBtn').addEventListener('click', () => initGrid()); // New CA pattern
+             document.getElementById('soundBtn').addEventListener('click', async function() { if (!soundEnabled) { const success = await initAudio(); if(!success) this.textContent = "Sound Error"; } else { soundEnabled = false; if (Tone && Tone.Transport.state === "started") { /* Maybe stop synths gently? */ } this.textContent = "Enable Sound"; /* Consider muting gain instead? */ }});
+             document.getElementById('cameraBtn').addEventListener('click', function() { if (!cameraEnabled) initCamera(); else disableCamera(); this.textContent = cameraEnabled ? "Cam Off" : "Cam On"; });
+             document.querySelectorAll('.voice-button').forEach(b => b.addEventListener('click', function() { const v = this.dataset.voice; voiceStates[v] = !voiceStates[v]; this.classList.toggle('active'); }));
+             document.getElementById('reverbSlider').addEventListener('input', (e) => { if (reverb) reverb.wet.value = parseInt(e.target.value) / 100; });
+             // Sliders for visuals
+              document.getElementById('speedSlider').addEventListener('input', updateParametersFromSliders);
+              document.getElementById('decaySlider').addEventListener('input', updateParametersFromSliders);
+              document.getElementById('disturbanceSlider').addEventListener('input', updateParametersFromSliders);
+             // UI Toggles
+             document.querySelector('.toggle-ui').addEventListener('click', () => { const hidden = document.querySelector('.controls').classList.toggle('hidden'); document.querySelector('.title').classList.toggle('hidden', hidden); document.querySelector('.instructions').classList.toggle('hidden', hidden); });
+             document.querySelector('.fullscreen-btn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.querySelector('.container').requestFullscreen().catch(err => console.error(err)); });
+        }
+
+         function updateParametersFromSliders() {
+             noiseSpeed = 0.001 + (parseInt(document.getElementById('speedSlider').value)/100) * 0.02;
+             energyDecay = 0.92 + (parseInt(document.getElementById('decaySlider').value)/100) * 0.075;
+             disturbanceRadiusFactor = 0.2 + (parseInt(document.getElementById('disturbanceSlider').value)/100) * 0.8;
+             // noiseScale = 0.001 + (1 - (parseInt(document.getElementById('speedSlider').value)/100)) * 0.005; // Optional link
+         }
+
+        // Camera Functions (reuse previous)
+        function initCamera() { /* ... Copy from previous ... */ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Cam not supported.");return;}navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false}).then(stream=>{video.srcObject=stream;video.onloadedmetadata=()=>{video.play().catch(e=>console.error(e));cameraEnabled=true;prevImageData=null;document.getElementById('cameraBtn').textContent="Cam Off";document.querySelector('.instructions').textContent="Move to stir haze/sound.";console.log("Cam init.");};}).catch(err=>{console.error(err);alert("Could not access camera.");disableCamera();}); }
+        function disableCamera() { /* ... Copy from previous ... */ if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null;}cameraEnabled=false;prevImageData=null;document.getElementById('cameraBtn').textContent="Cam On";document.querySelector('.instructions').textContent="Interact to stir haze/sound.";console.log("Cam disabled.");}
+        function processCameraFeed(currentTime) { /* ... Copy from previous, ensure it calls the new addDisturbance ... */ if(!cameraEnabled||video.readyState<video.HAVE_METADATA||video.paused||video.ended)return;if(currentTime-lastProcessedCameraTime<cameraProcessInterval)return;lastProcessedCameraTime=currentTime;try{offCtx.save();offCtx.scale(-1,1);offCtx.drawImage(video,-offCanvas.width,0,offCanvas.width,offCanvas.height);offCtx.restore();const iData=offCtx.getImageData(0,0,offCanvas.width,offCanvas.height);if(prevImageData){const data=iData.data,prevData=prevImageData.data,w=iData.width,h=iData.height,step=5;for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){const i=(y*w+x)*4,rD=Math.abs(data[i]-prevData[i]),gD=Math.abs(data[i+1]-prevData[i+1]),bD=Math.abs(data[i+2]-prevData[i+2]),diff=(rD+gD+bD)/3;if(diff>motionThreshold)addDisturbance(x,y,70,diff/120);}}prevImageData=iData;}catch(e){console.error("Cam feed error:",e);}}
+
+
+        // --- Global Init ---
+        function init() {
+            resizeCanvas();
+            setupEventListeners();
+            // Start with UI hidden
+            document.querySelector('.controls').classList.add('hidden');
+            document.querySelector('.title').classList.add('hidden');
+            document.querySelector('.instructions').classList.add('hidden');
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            lastTime = performance.now();
+            animate(lastTime);
+            console.log("Ocean Loom - Conway Depths Initialized.");
+            setTimeout(() => { if (!isAudioInitialized && !audioInitPromise) { console.log("Click 'Enable Sound' to load audio."); } }, 1000);
+        }
+
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>
