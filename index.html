@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Mason — Nobode Ritual System</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        :root {
+            --deep-black: #020814;
+            --dark-blue: #041020;
+            --medium-blue: #061830;
+            --light-accent: rgba(100, 180, 255, 0.5);
+            --bright-accent: rgba(120, 200, 255, 0.7);
+            --text-light: #E0F0FF;
+            --border-accent: rgba(100, 180, 255, 0.2);
+            --glow: rgba(100, 180, 255, 0.15);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--deep-black);
+            color: var(--text-light);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.4;
+            padding: 0;
+            letter-spacing: -0.01em;
+            min-height: 100vh;
+            margin: 0;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+        
+        .title {
+            background: var(--dark-blue);
+            padding: 1rem 2rem;
+            position: relative;
+            overflow: hidden;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-accent);
+            justify-content: space-between;
+        }
+        
+        .title h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .thread-pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            opacity: 0.2;
+        }
+        
+        .pattern-thread {
+            position: absolute;
+            width: 1px;
+            height: 100%;
+            background: var(--light-accent);
+            box-shadow: 0 0 8px var(--glow);
+        }
+        
+        .thread-icon {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .thread-row {
+            display: flex;
+            gap: 3px;
+        }
+        
+        .thread {
+            width: 8px;
+            height: 1px;
+            background: var(--light-accent);
+            box-shadow: 0 0 5px var(--glow);
+        }
+        
+        .content {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .category {
+            margin-bottom: 3rem;
+        }
+        
+        .category h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--light-accent);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-accent);
+        }
+        
+        .loom-description {
+            margin-bottom: 2rem;
+            max-width: 800px;
+        }
+        
+        .loom-description p {
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        
+        .github-link {
+            color: var(--bright-accent);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border-accent);
+            padding-bottom: 1px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .github-link:hover {
+            border-color: var(--bright-accent);
+        }
+        
+        .loom-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .loom-link {
+            display: block;
+            padding: 1.2rem;
+            background: var(--medium-blue);
+            border: 1px solid var(--border-accent);
+            border-radius: 4px;
+            color: var(--text-light);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .loom-link:hover {
+            background: var(--dark-blue);
+            border-color: var(--bright-accent);
+            box-shadow: 0 0 15px var(--glow);
+            transform: translateY(-2px);
+        }
+        
+        .loom-link span {
+            position: relative;
+            z-index: 2;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .loom-link .description {
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+        
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.8rem;
+        }
+        
+        .tag {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            background: rgba(100, 180, 255, 0.1);
+            border-radius: 3px;
+            border: 1px solid rgba(100, 180, 255, 0.2);
+        }
+        
+        .loom-link::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent 65%, var(--light-accent) 100%);
+            opacity: 0.1;
+            transition: opacity 0.3s ease;
+        }
+        
+        .loom-link:hover::before {
+            opacity: 0.2;
+        }
+        
+        .particle {
+            position: fixed;
+            width: 2px;
+            height: 2px;
+            background: var(--light-accent);
+            border-radius: 50%;
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                padding: 1.5rem;
+            }
+            
+            .loom-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">
+            <div class="thread-pattern">
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+                <div class="pattern-thread"></div>
+            </div>
+            <h1>Ocean Mason</h1>
+            <div class="thread-icon">
+                <div class="thread-row">
+                    <div class="thread"></div>
+                    <div class="thread"></div>
+                    <div class="thread"></div>
+                </div>
+                <div class="thread-row">
+                    <div class="thread"></div>
+                    <div class="thread"></div>
+                    <div class="thread"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="category">
+                <h2>About Ocean Nobode</h2>
+                <div class="loom-description">
+                    <p>The Ocean Nobode collection represents a series of digital meditation tools that explore the principles of non-extractive computation and ontological rebellion. Each experience creates a space for reflection on the nature of digital sovereignty and the hidden depths of computational reality.</p>
+                    <p>These looms have been refined to create authentic textile-like experiences with deep ocean aesthetics, featuring subtle wave movements, thread interactions, and haunting soundscapes that evoke the mysterious qualities of the deep sea.</p>
+                    <p>As you interact with these experiences, consider how software acts not merely as a tool but as an ontological force that shapes reality, and how true sovereignty might require non-Turing models of thought.</p>
+                </div>
+            </div>
+            
+            <div class="category">
+                <h2>Core Ocean Looms</h2>
+                <div class="loom-list">
+                    <a href="./nobode-basic.html" class="loom-link">
+                        <span>Abyssal Depths</span>
+                        <div class="description">The most essential ocean experience with haunting sounds, floating particles, and camera interaction.</div>
+                        <div class="tags">
+                            <span class="tag">sound</span>
+                            <span class="tag">camera</span>
+                            <span class="tag">minimal</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-simple.html" class="loom-link">
+                        <span>Ocean Threads</span>
+                        <div class="description">A simplified ocean loom focused on thread interactions with sound response.</div>
+                        <div class="tags">
+                            <span class="tag">sound</span>
+                            <span class="tag">threads</span>
+                            <span class="tag">simple</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-loom.html" class="loom-link">
+                        <span>Original Nobode</span>
+                        <div class="description">The original Nobode experience with full audio and visual capabilities.</div>
+                        <div class="tags">
+                            <span class="tag">original</span>
+                            <span class="tag">audio</span>
+                            <span class="tag">visual</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom.html" class="loom-link">
+                        <span>Ocean Loom</span>
+                        <div class="description">Primary ocean-themed loom with wave patterns and deep sea aesthetics.</div>
+                        <div class="tags">
+                            <span class="tag">waves</span>
+                            <span class="tag">deep</span>
+                            <span class="tag">ocean</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-core.html" class="loom-link">
+                        <span>Ocean Core</span>
+                        <div class="description">Core implementation of ocean patterns with essential functionality.</div>
+                        <div class="tags">
+                            <span class="tag">core</span>
+                            <span class="tag">essential</span>
+                            <span class="tag">ocean</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-deep.html" class="loom-link">
+                        <span>Deep Ocean</span>
+                        <div class="description">Explores the darkest depths of the ocean with enhanced visual effects.</div>
+                        <div class="tags">
+                            <span class="tag">deep</span>
+                            <span class="tag">dark</span>
+                            <span class="tag">abyss</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="category">
+                <h2>G25 Ocean Variants</h2>
+                <div class="loom-list">
+                    <a href="./nobode-g25-loom.html" class="loom-link">
+                        <span>G25 Ocean Base</span>
+                        <div class="description">The foundation G25 variant with ocean-themed visuals.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">base</span>
+                            <span class="tag">ocean</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-g25-deep-loom.html" class="loom-link">
+                        <span>G25 Deep Ocean</span>
+                        <div class="description">Explores the darkest depths with enhanced visual effects.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">deep</span>
+                            <span class="tag">visual</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-g25-eloom.html" class="loom-link">
+                        <span>G25 Energy Loom</span>
+                        <div class="description">Focuses on energy transfer between threads in an oceanic environment.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">energy</span>
+                            <span class="tag">transfer</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-g25-reloom.html" class="loom-link">
+                        <span>G25 Reflection Loom</span>
+                        <div class="description">Creates reflective patterns inspired by water surface distortions.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">reflection</span>
+                            <span class="tag">water</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-g25-deloom.html" class="loom-link">
+                        <span>G25 Depth Loom</span>
+                        <div class="description">Emphasizes depth perception in the oceanic environment.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">depth</span>
+                            <span class="tag">perception</span>
+                        </div>
+                    </a>
+                    <a href="./nobode-g25-meloom.html" class="loom-link">
+                        <span>G25 Memory Loom</span>
+                        <div class="description">Incorporates memory echoes of past interactions within the ocean depths.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">memory</span>
+                            <span class="tag">echoes</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="category">
+                <h2>Ocean G25 Specialized</h2>
+                <div class="loom-list">
+                    <a href="./ocean-loom-g25.html" class="loom-link">
+                        <span>Ocean G25</span>
+                        <div class="description">G25 implementation of the ocean loom with enhanced wave patterns.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">waves</span>
+                            <span class="tag">ocean</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-g25-main.html" class="loom-link">
+                        <span>Ocean G25 Main</span>
+                        <div class="description">Main G25 ocean variant with comprehensive features.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">main</span>
+                            <span class="tag">comprehensive</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-g25-low.html" class="loom-link">
+                        <span>Ocean G25 Low</span>
+                        <div class="description">Low-frequency focused ocean experience with deep resonance.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">low</span>
+                            <span class="tag">resonance</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-g25-tune.html" class="loom-link">
+                        <span>Ocean G25 Tune</span>
+                        <div class="description">Tuned ocean experience with harmonically balanced sound design.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">tune</span>
+                            <span class="tag">harmony</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-g25-retune.html" class="loom-link">
+                        <span>Ocean G25 Retune</span>
+                        <div class="description">Retuned variant with alternative harmonic structure.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">retune</span>
+                            <span class="tag">alternative</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-g25-repeat.html" class="loom-link">
+                        <span>Ocean G25 Repeat</span>
+                        <div class="description">Repetition-focused ocean patterns with cyclic structures.</div>
+                        <div class="tags">
+                            <span class="tag">g25</span>
+                            <span class="tag">repeat</span>
+                            <span class="tag">cycles</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="category">
+                <h2>Conway Ocean Harps</h2>
+                <div class="loom-list">
+                    <a href="./conway-ocean-harp.html" class="loom-link">
+                        <span>Conway Ocean Harp</span>
+                        <div class="description">Experimental integration of Conway's Game of Life with oceanic harp sounds.</div>
+                        <div class="tags">
+                            <span class="tag">conway</span>
+                            <span class="tag">harp</span>
+                            <span class="tag">ocean</span>
+                        </div>
+                    </a>
+                    <a href="./conway-ocean-harp-run1.html" class="loom-link">
+                        <span>Conway Ocean Harp Run1</span>
+                        <div class="description">First iteration of the Conway Ocean Harp with specific initial conditions.</div>
+                        <div class="tags">
+                            <span class="tag">conway</span>
+                            <span class="tag">run1</span>
+                            <span class="tag">iteration</span>
+                        </div>
+                    </a>
+                    <a href="./ocean-loom-haunt.html" class="loom-link">
+                        <span>Ocean Haunt</span>
+                        <div class="description">Haunting oceanic soundscape with ethereal visual elements.</div>
+                        <div class="tags">
+                            <span class="tag">haunt</span>
+                            <span class="tag">ethereal</span>
+                            <span class="tag">soundscape</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="category">
+                <h2>Philosophical Framework</h2>
+                <div class="loom-description">
+                    <p>The Ocean Nobode system operates within a framework that recognizes:</p>
+                    <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                        <li>Software as ontological violence</li>
+                        <li>Computation as extractive spacetime manipulation</li>
+                        <li>True sovereignty requiring non-Turing models</li>
+                        <li>Creative tools must become anti-tools that erase their corporate origins</li>
+                    </ul>
+                    <p>By engaging with these experiences, we invite reflection on how digital technologies shape our understanding of reality and how we might reclaim sovereignty in digital spaces.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add subtle thread animation to the background
+        document.addEventListener('DOMContentLoaded', function() {
+            const threadPattern = document.querySelector('.thread-pattern');
+            
+            // Create additional thread elements for a more dynamic background
+            for (let i = 0; i < 50; i++) {
+                const thread = document.createElement('div');
+                thread.classList.add('pattern-thread');
+                
+                // Random position
+                thread.style.left = `${Math.random() * 100}%`;
+                
+                // Random width and opacity
+                thread.style.width = `${0.5 + Math.random() * 1}px`;
+                thread.style.opacity = `${0.1 + Math.random() * 0.5}`;
+                
+                threadPattern.appendChild(thread);
+            }
+            
+            // Add floating particles
+            for (let i = 0; i < 30; i++) {
+                createFloatingParticle();
+            }
+        });
+        
+        // Create a floating particle that drifts upward
+        function createFloatingParticle() {
+            const particle = document.createElement('div');
+            particle.classList.add('particle');
+            
+            // Random starting position
+            const x = Math.random() * window.innerWidth;
+            const y = Math.random() * window.innerHeight;
+            
+            // Random size and opacity
+            const size = 1 + Math.random() * 2;
+            const opacity = 0.1 + Math.random() * 0.3;
+            
+            particle.style.left = `${x}px`;
+            particle.style.top = `${y}px`;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            particle.style.opacity = opacity;
+            
+            document.body.appendChild(particle);
+            
+            // Animate upward drift
+            let posY = y;
+            const speed = 0.2 + Math.random() * 0.5;
+            
+            function drift() {
+                posY -= speed;
+                particle.style.top = `${posY}px`;
+                
+                // Add slight horizontal drift
+                const posX = parseFloat(particle.style.left);
+                particle.style.left = `${posX + (Math.random() - 0.5) * 0.5}px`;
+                
+                // Remove if out of view and create a new one
+                if (posY < -10) {
+                    particle.remove();
+                    createFloatingParticle();
+                } else {
+                    requestAnimationFrame(drift);
+                }
+            }
+            
+            requestAnimationFrame(drift);
+        }
+    </script>
+</body>
+</html>
